@@ -15,6 +15,30 @@ from tqdm import tqdm
 from utils import DiceLoss
 from torchvision import transforms
 
+from torchvision import transforms  # already imported above
+
+def build_dataset(args, split):
+    from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
+    from datasets.dataset_busi import BUSI_dataset, RandomGeneratorBUSI
+
+    if args.dataset == 'Synapse':
+        ds = Synapse_dataset(
+            base_dir=args.root_path,
+            list_dir=args.list_dir,
+            split=split,
+            transform=transforms.Compose([RandomGenerator(output_size=[args.img_size, args.img_size])])
+        )
+    elif args.dataset == 'BUSI':
+        ds = BUSI_dataset(
+            base_dir=args.root_path,
+            list_dir=args.list_dir,
+            split=split,
+            transform=transforms.Compose([RandomGeneratorBUSI(output_size=[args.img_size, args.img_size])])
+        )
+    else:
+        raise ValueError(f'Unknown dataset: {args.dataset}')
+    return ds
+
 def trainer_synapse(args, model, snapshot_path):
     from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
     logging.basicConfig(filename=snapshot_path + "/log.txt", level=logging.INFO,
@@ -23,11 +47,15 @@ def trainer_synapse(args, model, snapshot_path):
     logging.info(str(args))
     base_lr = args.base_lr
     num_classes = args.num_classes
+    if args.dataset == 'BUSI':
+        assert num_classes == 2, "For BUSI set --num_classes 2"
+
     batch_size = args.batch_size * args.n_gpu
     # max_iterations = args.max_iterations
-    db_train = Synapse_dataset(base_dir=args.root_path, list_dir=args.list_dir, split="train",
-                               transform=transforms.Compose(
-                                   [RandomGenerator(output_size=[args.img_size, args.img_size])]))
+    # db_train = Synapse_dataset(base_dir=args.root_path, list_dir=args.list_dir, split="train",
+    #                            transform=transforms.Compose(
+    #                                [RandomGenerator(output_size=[args.img_size, args.img_size])]))
+    db_train = build_dataset(args, split="train")
     print("The length of train set is: {}".format(len(db_train)))
 
     def worker_init_fn(worker_id):
@@ -70,14 +98,34 @@ def trainer_synapse(args, model, snapshot_path):
 
             logging.info('iteration %d : loss : %f, loss_ce: %f' % (iter_num, loss.item(), loss_ce.item()))
 
+            # if iter_num % 20 == 0:
+            #     image = image_batch[1, 0:1, :, :]
+            #     image = (image - image.min()) / (image.max() - image.min())
+            #     writer.add_image('train/Image', image, iter_num)
+            #     outputs = torch.argmax(torch.softmax(outputs, dim=1), dim=1, keepdim=True)
+            #     writer.add_image('train/Prediction', outputs[1, ...] * 50, iter_num)
+            #     labs = label_batch[1, ...].unsqueeze(0) * 50
+            #     writer.add_image('train/GroundTruth', labs, iter_num)
+
             if iter_num % 20 == 0:
-                image = image_batch[1, 0:1, :, :]
-                image = (image - image.min()) / (image.max() - image.min())
-                writer.add_image('train/Image', image, iter_num)
-                outputs = torch.argmax(torch.softmax(outputs, dim=1), dim=1, keepdim=True)
-                writer.add_image('train/Prediction', outputs[1, ...] * 50, iter_num)
-                labs = label_batch[1, ...].unsqueeze(0) * 50
+                # image logging (handle C==1 or C==3)
+                img = image_batch[1]  # [C,H,W]
+                # normalize per-sample for visualization
+                imin, imax = img.min(), img.max()
+                if (imax - imin) > 1e-6:
+                    img = (img - imin) / (imax - imin)
+
+                if img.shape[0] == 1:
+                    writer.add_image('train/Image', img, iter_num)                # [1,H,W]
+                else:
+                    writer.add_image('train/Image', img[:3, ...], iter_num)       # [3,H,W]
+
+                # prediction & GT
+                preds = torch.argmax(torch.softmax(outputs, dim=1), dim=1, keepdim=True)  # [B,1,H,W]
+                writer.add_image('train/Prediction', preds[1] * 50, iter_num)
+                labs = label_batch[1].unsqueeze(0) * 50  # [1,H,W]
                 writer.add_image('train/GroundTruth', labs, iter_num)
+
 
         save_interval = 50  # int(max_epoch/6)
         if epoch_num > int(max_epoch / 2) and (epoch_num + 1) % save_interval == 0:

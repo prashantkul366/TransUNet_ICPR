@@ -381,6 +381,7 @@ class VisionTransformer(nn.Module):
             kernel_size=3,
         )
         self.config = config
+        print("TransUnet Initiated")
 
     def forward(self, x):
         if x.size()[1] == 1:

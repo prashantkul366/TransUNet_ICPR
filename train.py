@@ -55,12 +55,24 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     dataset_name = args.dataset
+    # dataset_config = {
+    #     'Synapse': {
+    #         'root_path': '../data/Synapse/train_npz',
+    #         'list_dir': './lists/lists_Synapse',
+    #         'num_classes': 9,
+    #     },
+    # }
     dataset_config = {
-        'Synapse': {
-            'root_path': '../data/Synapse/train_npz',
-            'list_dir': './lists/lists_Synapse',
-            'num_classes': 9,
-        },
+    'Synapse': {
+        'root_path': '../data/Synapse/train_npz',
+        'list_dir': './lists/lists_Synapse',
+        'num_classes': 9,
+            },
+    'BUSI': {
+        'root_path': '/content/drive/MyDrive/Prashant/research_datasets/Dataset_BUSI_80_20',
+        'list_dir': '/content/drive/MyDrive/Prashant/TransUNet_ICPR/lists/lists_BUSI',
+        'num_classes': 2,
+            },
     }
     args.num_classes = dataset_config[dataset_name]['num_classes']
     args.root_path = dataset_config[dataset_name]['root_path']
