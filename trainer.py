@@ -200,7 +200,7 @@ def trainer_synapse(args, model, snapshot_path):
 
     # --- datasets & loaders ---
     db_train = build_dataset(args, split="train")
-    db_val   = build_dataset(args, split="val")
+    db_val   = build_dataset(args, split="test")
     print("The length of train set is: {}".format(len(db_train)))
     print("The length of val   set is: {}".format(len(db_val)))
 
