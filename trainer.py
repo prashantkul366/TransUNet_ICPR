@@ -14,13 +14,11 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import DiceLoss
 from torchvision import transforms
-
-from torchvision import transforms  # already imported above
+from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
+from datasets.dataset_busi import BUSI_dataset, RandomGeneratorBUSI
 
 def build_dataset(args, split):
-    # from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
-    from datasets.dataset_busi import BUSI_dataset, RandomGeneratorBUSI
-
+    
     if args.dataset == 'Synapse':
         ds = Synapse_dataset(
             base_dir=args.root_path,
@@ -40,7 +38,6 @@ def build_dataset(args, split):
     return ds
 
 def trainer_synapse(args, model, snapshot_path):
-    # from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
     logging.basicConfig(filename=snapshot_path + "/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
