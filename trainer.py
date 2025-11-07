@@ -40,7 +40,7 @@ def build_dataset(args, split):
     return ds
 
 def trainer_synapse(args, model, snapshot_path):
-    from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
+    # from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
     logging.basicConfig(filename=snapshot_path + "/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
