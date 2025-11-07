@@ -18,7 +18,7 @@ from torchvision import transforms
 from torchvision import transforms  # already imported above
 
 def build_dataset(args, split):
-    from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
+    # from datasets.dataset_synapse import Synapse_dataset, RandomGenerator
     from datasets.dataset_busi import BUSI_dataset, RandomGeneratorBUSI
 
     if args.dataset == 'Synapse':
