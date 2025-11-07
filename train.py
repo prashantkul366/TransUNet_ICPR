@@ -102,5 +102,6 @@ if __name__ == "__main__":
     net.load_from(weights=np.load(config_vit.pretrained_path))
     # net.load_from(weights=np.load('/content/drive/MyDrive/Prashant/model/vit_checkpoint/imagenet21k/R50-ViT-B_16.npz'))
     
-    trainer = {'Synapse': trainer_synapse,}
+    # trainer = {'Synapse': trainer_synapse,}
+    trainer = {'BUSI': trainer_synapse,}
     trainer[dataset_name](args, net, snapshot_path)
