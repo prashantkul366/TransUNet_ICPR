@@ -66,7 +66,7 @@ class BUSI_dataset(Dataset):
     list_dir provides train.txt / val.txt with stems (without extension).
     """
     def __init__(self, base_dir, list_dir, split, transform=None, image_exts=('.png','.jpg','.jpeg'), mask_exts=('.png','.jpg')):
-        assert split in ['train','val']
+        assert split in ['train','test']
         self.base_dir = base_dir
         self.split = split
         self.transform = transform
