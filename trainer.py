@@ -261,7 +261,8 @@ def trainer_synapse(args, model, snapshot_path):
             writer.add_scalar('train/loss_ce', loss_ce.item(), iter_num)
             writer.add_scalar('train/loss_dice', loss_dice.item(), iter_num)
 
-            logging.info('iter %d : loss %.6f | ce %.6f | dice %.6f' %
+            if iter_num % 20 == 0:
+                logging.info('iter %d : loss %.6f | ce %.6f | dice %.6f' %
                          (iter_num, loss.item(), loss_ce.item(), loss_dice.item()))
 
             if iter_num % 20 == 0:
