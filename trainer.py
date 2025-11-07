@@ -266,19 +266,27 @@ def trainer_synapse(args, model, snapshot_path):
                          (iter_num, loss.item(), loss_ce.item(), loss_dice.item()))
 
             if iter_num % 20 == 0:
+                # pick a valid index even if batch size == 1
+                bsz = image_batch.size(0)
+                vis_idx = 0 if bsz == 1 else 1
+
                 # image logging (handle C==1 or C==3)
-                img = image_batch[1]
+                img = image_batch[vis_idx]  # [C,H,W]
                 imin, imax = img.min(), img.max()
                 if (imax - imin) > 1e-6:
                     img = (img - imin) / (imax - imin)
+
                 if img.shape[0] == 1:
                     writer.add_image('train/Image', img, iter_num)
                 else:
                     writer.add_image('train/Image', img[:3, ...], iter_num)
-                preds = torch.argmax(torch.softmax(outputs, dim=1), dim=1, keepdim=True)
-                writer.add_image('train/Prediction', preds[1] * 50, iter_num)
-                labs = label_batch[1].unsqueeze(0) * 50
+
+                # prediction & GT
+                preds = torch.argmax(torch.softmax(outputs, dim=1), dim=1, keepdim=True)  # [B,1,H,W]
+                writer.add_image('train/Prediction', preds[vis_idx] * 50, iter_num)
+                labs = label_batch[vis_idx].unsqueeze(0) * 50  # [1,H,W]
                 writer.add_image('train/GroundTruth', labs, iter_num)
+
 
         # -------- validate --------
         val_dice = eval_val_dice(model, valloader, num_classes, device="cuda")
