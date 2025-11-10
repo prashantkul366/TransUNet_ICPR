@@ -450,6 +450,7 @@ CONFIGS = {
     'R50-ViT-L_16': configs.get_r50_l16_config(),
     'testing': configs.get_testing(),
     'MAMBA-VSS': configs.get_mamba_vss_config(),
+    'MOBILE-MAMBA': configs.get_mobilemamba_config(),
 }
 
 
