@@ -175,3 +175,25 @@ def get_mamba_vss_config():
 
     return config
 
+def get_mobilemamba_config():
+    config = ml_collections.ConfigDict()
+    config.backbone = 'mobilemamba'
+    config.mamba_variant = 'MobileMamba_S6'   # ← matches the S6 weights you have
+    config.hidden_size = 768
+    config.decoder_channels = (256, 128, 64, 32)
+    config.n_classes = 2
+    config.activation = 'softmax'
+
+    config.n_skip = 4
+    config.skip_channels = [192, 192, 384, 448]
+
+    # ← point to the exact file you just extracted
+    config.mamba_pretrained_ckpt = "/content/drive/MyDrive/Prashant/TransUNet_ICPR/pretrained/MobileMamba_S6/mobilemamba_s6.pth"
+
+    # legacy keys (unused by MobileMamba path)
+    config.patches = ml_collections.ConfigDict({'size': (16, 16)})
+    config.classifier = 'seg'
+    config.representation_size = None
+    config.resnet_pretrained_path = None
+    config.pretrained_path = None
+    return config
