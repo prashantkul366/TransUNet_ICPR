@@ -109,8 +109,8 @@ if __name__ == "__main__":
     config_vit.mamba_pretrained_ckpt = "/content/drive/MyDrive/Prashant/TransUNet_ICPR/pretrained/vmamba_pretrained.pth"
     # net = ViT_seg(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
     net = ViT_seg_VSS(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
-    # net.load_from(config_vit)
-    net.load_from(weights=np.load(config_vit.mamba_pretrained_ckpt))
+    net.load_from(config_vit)
+    # net.load_from(weights=np.load(config_vit.mamba_pretrained_ckpt))
     #######################################################################################
 
     # trainer = {'Synapse': trainer_synapse,}

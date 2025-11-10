@@ -66,7 +66,8 @@ class MambaVSSBackbone(nn.Module):
             return
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        state = torch.load(ckpt_path, map_location=device)
+        # state = torch.load(ckpt_path, map_location=device)
+        state = torch.load(ckpt_path, map_location=device, weights_only=False)
         if "model" in state:
             state = state["model"]
 
