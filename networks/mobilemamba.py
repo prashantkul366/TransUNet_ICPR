@@ -4,7 +4,9 @@ import torch.nn as nn
 from timm.models.vision_transformer import trunc_normal_
 from timm.models.layers import SqueezeExcite
 # from model import MODEL
-from networks.model_reg import MODEL
+# from networks.model_reg import MODEL
+from networks.model_reg import MODEL, load_checkpoint
+
 # from model.lib_mamba.vmambanew import SS2D
 from networks.vmambanew import SS2D
 import torch.nn.functional as F
