@@ -130,3 +130,38 @@ def get_h14_config():
     config.representation_size = None
 
     return config
+
+
+def get_mamba_vss_config():
+    config = ml_collections.ConfigDict()
+
+    config.backbone = 'mamba_vss'
+    config.mamba_dims   = [96, 192, 384, 768]
+    config.mamba_depths = [2, 2, 9, 2]
+    config.mamba_patch  = 4
+    config.mamba_d_state = 16
+    config.mamba_drop_rate = 0.0
+    config.mamba_drop_path_rate = 0.1
+    config.mamba_use_checkpoint = False
+
+    config.hidden_size = config.mamba_dims[-1]      # 768
+    config.decoder_channels = (256, 128, 64, 16)
+    config.n_classes = 2
+    config.activation = 'softmax'
+
+    # skips correspond to features returned by the adapter: [H/16, H/8, H/4, None]
+    config.n_skip = 3
+    config.skip_channels = [config.mamba_dims[2],  # 384
+                            config.mamba_dims[1],  # 192
+                            config.mamba_dims[0],  # 96
+                            0]
+
+    # keep keys that other code may access
+    config.patches = ml_collections.ConfigDict({'size': (4, 4)})
+    config.classifier = 'seg'
+    config.representation_size = None
+    config.resnet_pretrained_path = None
+    config.pretrained_path = None  # don't load ViT weights
+
+    return config
+

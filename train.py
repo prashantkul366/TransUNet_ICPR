@@ -5,7 +5,11 @@ import random
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-from networks.vit_seg_modeling import VisionTransformer as ViT_seg
+
+################################################################
+# from networks.vit_seg_modeling import VisionTransformer as ViT_seg
+from networks.vit_seg_modeling_VSS import VisionTransformer as ViT_seg_VSS
+#################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse
 
@@ -93,15 +97,22 @@ if __name__ == "__main__":
 
     if not os.path.exists(snapshot_path):
         os.makedirs(snapshot_path)
+
     config_vit = CONFIGS_ViT_seg[args.vit_name]
     config_vit.n_classes = args.num_classes
     config_vit.n_skip = args.n_skip
     if args.vit_name.find('R50') != -1:
         config_vit.patches.grid = (int(args.img_size / args.vit_patches_size), int(args.img_size / args.vit_patches_size))
-    net = ViT_seg(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
-    net.load_from(weights=np.load(config_vit.pretrained_path))
-    # net.load_from(weights=np.load('/content/drive/MyDrive/Prashant/model/vit_checkpoint/imagenet21k/R50-ViT-B_16.npz'))
-    
+
+    #######################################################################################
+   
+    config_vit.mamba_pretrained_ckpt = "/content/drive/MyDrive/Prashant/TransUNet_ICPR/pretrained/vmamba_pretrained.pth"
+    # net = ViT_seg(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    net = ViT_seg_VSS(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    net.load_from(config_vit)
+    # net.load_from(weights=np.load(config_vit.pretrained_path))
+    #######################################################################################
+
     # trainer = {'Synapse': trainer_synapse,}
     trainer = {'BUSI': trainer_synapse,}
     trainer[dataset_name](args, net, snapshot_path)
