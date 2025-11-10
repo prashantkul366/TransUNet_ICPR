@@ -8,7 +8,8 @@ import torch.backends.cudnn as cudnn
 
 ################################################################
 # from networks.vit_seg_modeling import VisionTransformer as ViT_seg
-from networks.vit_seg_modeling_VSS import VisionTransformer as ViT_seg_VSS
+# from networks.vit_seg_modeling_VSS import VisionTransformer as ViT_seg_VSS
+from networks.vit_seg_modeling_KAN import VisionTransformer as ViT_seg_KAN
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse
@@ -105,14 +106,30 @@ if __name__ == "__main__":
     if args.vit_name.find('R50') != -1:
         config_vit.patches.grid = (int(args.img_size / args.vit_patches_size), int(args.img_size / args.vit_patches_size))
 
+
+    # TransUnet
     #######################################################################################
-   
-    config_vit.mamba_pretrained_ckpt = "/content/drive/MyDrive/Prashant/TransUNet_ICPR/pretrained/vmamba_pretrained.pth"
     # net = ViT_seg(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
-    net = ViT_seg_VSS(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
-    net.load_from(config_vit)
-    # net.load_from(weights=np.load(config_vit.mamba_pretrained_ckpt))
+    # net.load_from(weights=np.load(config_vit.pretrained_path))
+
     #######################################################################################
+
+
+    # VSS ENcoder  
+    #######################################################################################
+    # config_vit.mamba_pretrained_ckpt = "/content/drive/MyDrive/Prashant/TransUNet_ICPR/pretrained/vmamba_pretrained.pth"
+    # net = ViT_seg_VSS(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net.load_from(config_vit)
+    #######################################################################################
+
+
+    # TRANSFORMER WITH KAN 
+    ######################################################################################
+    net = ViT_seg_KAN(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    net.load_from(weights=np.load(config_vit.pretrained_path))
+
+    ######################################################################################
+
 
     # trainer = {'Synapse': trainer_synapse,}
     trainer = {'BUSI': trainer_synapse,}

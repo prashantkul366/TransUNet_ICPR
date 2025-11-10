@@ -18,7 +18,7 @@ from torch.nn.modules.utils import _pair
 from scipy import ndimage
 from . import vit_seg_configs as configs
 from .vit_seg_modeling_resnet_skip import ResNetV2
-
+from .kan import KAN 
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +118,61 @@ class Mlp(nn.Module):
         x = self.dropout(x)
         return x
 
+class KANMLP(nn.Module):
+    """
+    Drop-in replacement for Mlp that uses KAN.
+    Expects (B, N, D) in and out. Internally flattens tokens to (B*N, D).
+    """
+    def __init__(self, config):
+        super().__init__()
+        hidden = config.hidden_size
+        mlp_dim = config.transformer["mlp_dim"]
+
+        # Read KAN hyperparams from config with sensible defaults
+        self.grid_size    = getattr(config, "kan_grid_size", 5)
+        self.spline_order = getattr(config, "kan_spline_order", 3)
+        self.scale_noise  = getattr(config, "kan_scale_noise", 0.1)
+        self.scale_base   = getattr(config, "kan_scale_base", 1.0)
+        self.scale_spline = getattr(config, "kan_scale_spline", 1.0)
+        self.grid_eps     = getattr(config, "kan_grid_eps", 0.02)
+        self.grid_range   = getattr(config, "kan_grid_range", [-1, 1])
+
+        # Two-layer MLP path: hidden -> mlp_dim -> hidden, but using KAN
+        self.kan = KAN(
+            layers_hidden=[hidden, mlp_dim, hidden],
+            grid_size=self.grid_size,
+            spline_order=self.spline_order,
+            scale_noise=self.scale_noise,
+            scale_base=self.scale_base,
+            scale_spline=self.scale_spline,
+            grid_eps=self.grid_eps,
+            grid_range=self.grid_range,
+        )
+
+        # Keep the same dropout semantics as the original Mlp
+        self.dropout = Dropout(config.transformer["dropout_rate"])
+
+        # Optional: tiny LayerNorm to stabilize ranges before KAN (KAN grid default is [-1,1])
+        # LayerNorm keeps zero mean/unit variance, which is friendly to KAN splines.
+        self.pre_norm = LayerNorm(hidden, eps=1e-6)
+
+    def forward(self, x):
+        # x: (B, N, D)
+        B, N, D = x.shape
+        x = self.pre_norm(x)
+
+        x_flat = x.reshape(B * N, D)   # (BN, D)
+        y_flat = self.kan(x_flat)      # (BN, D)
+        y = y_flat.reshape(B, N, D)    # (B, N, D)
+
+        # Match original MLP’s dropout-after-each-linear feel
+        y = self.dropout(y)
+        return y
+
+    def regularization_loss(self, reg_act=1.0, reg_ent=1.0):
+        # Expose KAN’s regularizer so your training loop can add it
+        return self.kan.regularization_loss(reg_act, reg_ent)
+
 
 class Embeddings(nn.Module):
     """Construct the embeddings from patch, position embeddings.
@@ -171,8 +226,22 @@ class Block(nn.Module):
         self.hidden_size = config.hidden_size
         self.attention_norm = LayerNorm(config.hidden_size, eps=1e-6)
         self.ffn_norm = LayerNorm(config.hidden_size, eps=1e-6)
-        self.ffn = Mlp(config)
+
+        print("BLock with KAN instead of MLP initiated")
+        # ############################################################
+        # # self.ffn = Mlp(config)
+        # self.ffn = KANMLP(config)
+        # ############################################################
+        
         self.attn = Attention(config, vis)
+        # swap FFN
+        if getattr(config, "use_kan_ffn", False):
+            self.ffn = KANMLP(config)
+            self._ffn_is_kan = True
+        else:
+            self.ffn = Mlp(config)
+            self._ffn_is_kan = False
+
 
     def forward(self, x):
         h = x
@@ -208,15 +277,16 @@ class Block(nn.Module):
             self.attn.value.bias.copy_(value_bias)
             self.attn.out.bias.copy_(out_bias)
 
-            mlp_weight_0 = np2th(weights[pjoin(ROOT, FC_0, "kernel")]).t()
-            mlp_weight_1 = np2th(weights[pjoin(ROOT, FC_1, "kernel")]).t()
-            mlp_bias_0 = np2th(weights[pjoin(ROOT, FC_0, "bias")]).t()
-            mlp_bias_1 = np2th(weights[pjoin(ROOT, FC_1, "bias")]).t()
+            if not getattr(self, "_ffn_is_kan", False):
+                mlp_weight_0 = np2th(weights[pjoin(ROOT, FC_0, "kernel")]).t()
+                mlp_weight_1 = np2th(weights[pjoin(ROOT, FC_1, "kernel")]).t()
+                mlp_bias_0 = np2th(weights[pjoin(ROOT, FC_0, "bias")]).t()
+                mlp_bias_1 = np2th(weights[pjoin(ROOT, FC_1, "bias")]).t()
 
-            self.ffn.fc1.weight.copy_(mlp_weight_0)
-            self.ffn.fc2.weight.copy_(mlp_weight_1)
-            self.ffn.fc1.bias.copy_(mlp_bias_0)
-            self.ffn.fc2.bias.copy_(mlp_bias_1)
+                self.ffn.fc1.weight.copy_(mlp_weight_0)
+                self.ffn.fc2.weight.copy_(mlp_weight_1)
+                self.ffn.fc1.bias.copy_(mlp_bias_0)
+                self.ffn.fc2.bias.copy_(mlp_bias_1)
 
             self.attention_norm.weight.copy_(np2th(weights[pjoin(ROOT, ATTENTION_NORM, "scale")]))
             self.attention_norm.bias.copy_(np2th(weights[pjoin(ROOT, ATTENTION_NORM, "bias")]))
@@ -381,7 +451,7 @@ class VisionTransformer(nn.Module):
             kernel_size=3,
         )
         self.config = config
-        print("TransUnet Initiated")
+        print("TransUnet with KAN Initiated")
 
     def forward(self, x):
         if x.size()[1] == 1:

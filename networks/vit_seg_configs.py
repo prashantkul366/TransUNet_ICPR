@@ -57,6 +57,16 @@ def get_r50_b16_config():
     config.n_skip = 3
     config.activation = 'softmax'
 
+    config.use_kan_ffn = True
+    config.kan_grid_size = 5
+    config.kan_spline_order = 3
+    config.kan_scale_noise = 0.1
+    config.kan_scale_base = 1.0
+    config.kan_scale_spline = 1.0
+    config.kan_grid_eps = 0.02
+    config.kan_grid_range = [-1, 1]
+
+
     return config
 
 
