@@ -8,9 +8,34 @@ from timm.models._helpers import load_checkpoint
 from timm.models.layers import set_layer_config
 from timm.models._hub import load_model_config_from_hf
 from timm.models._factory import parse_model_name
-from util.registry import Registry
-MODEL = Registry('Model')
+# from util.registry import Registry
 
+
+
+class Registry:
+
+	def __init__(self, name):
+		self.name = name
+		self.name_to_fn = dict()
+
+	def register_module(self, fn, name=None):
+		module_name = name if name else fn.__name__
+		self.name_to_fn[module_name] = fn
+		return fn
+		
+	def __len__(self):
+		return len(self.name_to_fn)
+
+	def __contains__(self, name):
+		return name in self.name_to_fn.keys()
+
+	def get_module(self, name):
+		if self.__contains__(name):
+			return self.name_to_fn[name]
+		else:
+			raise ValueError('invalid module: {}'.format(name))
+
+MODEL = Registry('Model')	
 
 def get_model(cfg_model):
 	model_name = cfg_model.name
