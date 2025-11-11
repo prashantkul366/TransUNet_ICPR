@@ -89,3 +89,78 @@ class WaveKAN(nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
+
+# networks/wave_kan.py
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+__all__ = ["WaveKANLite", "WaveKANLinearLite"]
+
+class WaveKANLinearLite(nn.Module):
+    """
+    Memory-safe: wavelet per INPUT channel, then a linear map to outputs.
+    x: (BN, Din) -> wave(x): (BN, Din) -> Linear(Din->Dout) -> (BN, Dout)
+    """
+    def __init__(self, in_features, out_features, wavelet_type='mexican_hat', eps=1e-4):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.wavelet_type = wavelet_type
+        self.eps = eps
+
+        # Per-INPUT parameters (no (out,in) grid!)
+        self._scale_raw = nn.Parameter(torch.zeros(in_features))   # -> softplus to keep positive
+        self.translation = nn.Parameter(torch.zeros(in_features))
+
+        # Linear projection Din -> Dout
+        self.weight = nn.Parameter(torch.empty(out_features, in_features))
+        self.bias   = nn.Parameter(torch.zeros(out_features))
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+
+        # BN over features (expects (N, C))
+        self.bn = nn.BatchNorm1d(out_features)
+
+    def _scale(self):
+        return F.softplus(self._scale_raw) + self.eps  # positive
+
+    def _wavelet_1d(self, z):
+        # z: (BN, Din)
+        if self.wavelet_type == 'mexican_hat':
+            term1 = (z ** 2) - 1.0
+            term2 = torch.exp(-0.5 * z ** 2)
+            return (2.0 / (math.sqrt(3) * math.pi ** 0.25)) * term1 * term2
+        elif self.wavelet_type == 'morlet':
+            omega0 = 5.0
+            return torch.exp(-0.5 * z ** 2) * torch.cos(omega0 * z)
+        elif self.wavelet_type == 'dog':
+            return -z * torch.exp(-0.5 * z ** 2)
+        else:
+            raise ValueError(f"Unsupported wavelet type: {self.wavelet_type}")
+
+    def forward(self, x):
+        # x: (BN, Din)
+        scale = self._scale()            # (Din,)
+        trans = self.translation         # (Din,)
+        z = (x - trans) / scale          # (BN, Din)
+        w = self._wavelet_1d(z)          # (BN, Din)
+        out = F.linear(w, self.weight, self.bias)  # (BN, Dout)
+        return self.bn(out)
+
+
+class WaveKANLite(nn.Module):
+    """
+    Two-layer stack like MLP: [D, mlp_dim, D] using WaveKANLinearLite.
+    """
+    def __init__(self, layers_hidden, wavelet_type='mexican_hat'):
+        super().__init__()
+        layers = []
+        for Din, Dout in zip(layers_hidden[:-1], layers_hidden[1:]):
+            layers.append(WaveKANLinearLite(Din, Dout, wavelet_type=wavelet_type))
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x

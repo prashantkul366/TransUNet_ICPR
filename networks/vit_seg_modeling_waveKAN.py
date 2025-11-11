@@ -175,6 +175,7 @@ class KANMLP(nn.Module):
 
 
 from .wave_kan import WaveKAN
+from .wave_kan import WaveKANLite 
 
 class WaveKANMLP(nn.Module):
     """
@@ -189,10 +190,13 @@ class WaveKANMLP(nn.Module):
         self.wavelet_type = getattr(config, "wavelet_type", "mexican_hat")
 
         # same 2-layer layout as MLP: hidden -> mlp_dim -> hidden
-        self.wkan = WaveKAN(
-            layers_hidden=[hidden, mlp_dim, hidden],
-            wavelet_type=self.wavelet_type,
-        )
+        # self.wkan = WaveKAN(
+        #     layers_hidden=[hidden, mlp_dim, hidden],
+        #     wavelet_type=self.wavelet_type,
+        # )
+
+        self.wkan = WaveKANLite([hidden, mlp_dim, hidden], wavelet_type=self.wavelet_type)
+
 
         self.dropout = nn.Dropout(config.transformer["dropout_rate"])
         self.pre_norm = nn.LayerNorm(hidden, eps=1e-6)
