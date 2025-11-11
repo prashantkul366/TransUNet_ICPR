@@ -1217,6 +1217,7 @@ default_cfgs = {
         url='https://huggingface.co/adamdad/kat_pretained/resolve/main/kat_base_patch16_224-finetune_440bf1ead9dd8ecab642078cfb60ae542f1fa33ca65517260501e02c011e38f2.pth')
 }
 
+default_cfgs = generate_default_cfgs(default_cfgs)
 
 def _create_kat_transformer(variant: str, pretrained: bool = False, **kwargs) -> KATVisionTransformer:
     out_indices = kwargs.pop('out_indices', 3)
