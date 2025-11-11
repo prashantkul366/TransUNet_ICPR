@@ -18,7 +18,7 @@ from torch.nn.modules.utils import _pair
 from scipy import ndimage
 from . import vit_seg_configs as configs
 from .vit_seg_modeling_resnet_skip import ResNetV2
-from .mobilemamba import MobileMamba_S6
+from .kan import KAN 
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +118,94 @@ class Mlp(nn.Module):
         x = self.dropout(x)
         return x
 
+class KANMLP(nn.Module):
+    """
+    Drop-in replacement for Mlp that uses KAN.
+    Expects (B, N, D) in and out. Internally flattens tokens to (B*N, D).
+    """
+    def __init__(self, config):
+        super().__init__()
+        hidden = config.hidden_size
+        mlp_dim = config.transformer["mlp_dim"]
+
+        # Read KAN hyperparams from config with sensible defaults
+        self.grid_size    = getattr(config, "kan_grid_size", 5)
+        self.spline_order = getattr(config, "kan_spline_order", 3)
+        self.scale_noise  = getattr(config, "kan_scale_noise", 0.1)
+        self.scale_base   = getattr(config, "kan_scale_base", 1.0)
+        self.scale_spline = getattr(config, "kan_scale_spline", 1.0)
+        self.grid_eps     = getattr(config, "kan_grid_eps", 0.02)
+        self.grid_range   = getattr(config, "kan_grid_range", [-1, 1])
+
+        # Two-layer MLP path: hidden -> mlp_dim -> hidden, but using KAN
+        self.kan = KAN(
+            layers_hidden=[hidden, mlp_dim, hidden],
+            grid_size=self.grid_size,
+            spline_order=self.spline_order,
+            scale_noise=self.scale_noise,
+            scale_base=self.scale_base,
+            scale_spline=self.scale_spline,
+            grid_eps=self.grid_eps,
+            grid_range=self.grid_range,
+        )
+
+        # Keep the same dropout semantics as the original Mlp
+        self.dropout = Dropout(config.transformer["dropout_rate"])
+
+        # Optional: tiny LayerNorm to stabilize ranges before KAN (KAN grid default is [-1,1])
+        # LayerNorm keeps zero mean/unit variance, which is friendly to KAN splines.
+        self.pre_norm = LayerNorm(hidden, eps=1e-6)
+
+    def forward(self, x):
+        # x: (B, N, D)
+        B, N, D = x.shape
+        x = self.pre_norm(x)
+
+        x_flat = x.reshape(B * N, D)   # (BN, D)
+        y_flat = self.kan(x_flat)      # (BN, D)
+        y = y_flat.reshape(B, N, D)    # (B, N, D)
+
+        # Match original MLP’s dropout-after-each-linear feel
+        y = self.dropout(y)
+        return y
+
+    def regularization_loss(self, reg_act=1.0, reg_ent=1.0):
+        # Expose KAN’s regularizer so your training loop can add it
+        return self.kan.regularization_loss(reg_act, reg_ent)
+
+
+from .wave_kan import WaveKAN
+
+class WaveKANMLP(nn.Module):
+    """
+    Drop-in replacement for Mlp/KANMLP using WaveKAN.
+    Keeps (B, N, D) -> (B, N, D) and dropout semantics.
+    """
+    def __init__(self, config):
+        super().__init__()
+        hidden = config.hidden_size
+        mlp_dim = config.transformer["mlp_dim"]
+
+        self.wavelet_type = getattr(config, "wavelet_type", "mexican_hat")
+
+        # same 2-layer layout as MLP: hidden -> mlp_dim -> hidden
+        self.wkan = WaveKAN(
+            layers_hidden=[hidden, mlp_dim, hidden],
+            wavelet_type=self.wavelet_type,
+        )
+
+        self.dropout = nn.Dropout(config.transformer["dropout_rate"])
+        self.pre_norm = nn.LayerNorm(hidden, eps=1e-6)
+
+    def forward(self, x):
+        # x: (B, N, D)
+        B, N, D = x.shape
+        x = self.pre_norm(x)
+        x_flat = x.reshape(B * N, D)     # (BN, D)
+        y_flat = self.wkan(x_flat)       # (BN, D)
+        y = y_flat.reshape(B, N, D)
+        return self.dropout(y)
+
 
 class Embeddings(nn.Module):
     """Construct the embeddings from patch, position embeddings.
@@ -164,57 +252,6 @@ class Embeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings, features
 
-class MambaEmbeddings(nn.Module):
-    """
-    A lightweight adapter:
-      - runs a MobileMamba backbone to get multi-scale features
-      - projects the last stage map to `hidden_size`
-      - flattens to (B, N, hidden) tokens
-      - manages a learnable positional embedding sized to N (lazy-initialized)
-      - returns (tokens, features) like the ViT Embeddings
-    """
-    def __init__(self, config, img_size, in_channels=3, mamba_variant="MobileMamba_S6"):
-        super().__init__()
-        self.config = config
-        self.img_size = _pair(img_size)
-
-        # build backbone (no classifier head)
-        if mamba_variant == "MobileMamba_S6":
-            self.backbone = MobileMamba_S6(num_classes=0)  # head = Identity
-            self.mamba_dims = [192, 384, 448]  # embed_dim for S6 (keep in sync with mobilemamba CFG)
-        else:
-            raise ValueError(f"Unsupported mamba_variant: {mamba_variant}")
-
-        c_last = self.mamba_dims[-1]  # channels at final stage
-        self.to_hidden = nn.Conv2d(c_last, config.hidden_size, kernel_size=1, stride=1, padding=0)
-
-        # Positional embeddings will be lazily created for the exact H*W we see at runtime
-        self.pos_embed = None
-        self.dropout = Dropout(config.transformer["dropout_rate"])
-
-    def forward(self, x):
-        # MobileMamba multi-scale features
-        last, skips = self.backbone.forward_features(x)  # last: (B, C_last, H, W)
-
-        # Project to hidden and flatten to tokens
-        x = self.to_hidden(last)                         # (B, hidden, H, W)
-        B, C, H, W = x.shape
-        n_patches = H * W
-        x = x.flatten(2).transpose(1, 2)                 # (B, N, hidden)
-
-        # Create/resize learnable pos embed for this N
-        if (self.pos_embed is None) or (self.pos_embed.size(1) != n_patches) or (self.pos_embed.size(2) != C):
-            # keep on same device/dtype
-            pe = torch.zeros(1, n_patches, C, device=x.device, dtype=x.dtype)
-            self.pos_embed = nn.Parameter(pe)  # learnable, like ViT
-
-        x = x + self.pos_embed
-        x = self.dropout(x)
-
-        # Return tokens and the raw skip features for the decoder
-        # We hand them out in low->high order: [s0(/16), s1(/16), s2(/32), s3(/64)]
-        return x, skips
-
 
 class Block(nn.Module):
     def __init__(self, config, vis):
@@ -222,8 +259,22 @@ class Block(nn.Module):
         self.hidden_size = config.hidden_size
         self.attention_norm = LayerNorm(config.hidden_size, eps=1e-6)
         self.ffn_norm = LayerNorm(config.hidden_size, eps=1e-6)
-        self.ffn = Mlp(config)
+
+        print("Block with Wave-KAN instead of MLP initiated")
+        # ############################################################
+        # # self.ffn = Mlp(config)
+        # self.ffn = KANMLP(config)
+        # ############################################################
+        
         self.attn = Attention(config, vis)
+        # swap FFN
+        if getattr(config, "use_kan_ffn", False):
+            self.ffn = WaveKANMLP(config)
+            self._ffn_is_kan = True
+        else:
+            self.ffn = Mlp(config)
+            self._ffn_is_kan = False
+
 
     def forward(self, x):
         h = x
@@ -259,15 +310,17 @@ class Block(nn.Module):
             self.attn.value.bias.copy_(value_bias)
             self.attn.out.bias.copy_(out_bias)
 
-            mlp_weight_0 = np2th(weights[pjoin(ROOT, FC_0, "kernel")]).t()
-            mlp_weight_1 = np2th(weights[pjoin(ROOT, FC_1, "kernel")]).t()
-            mlp_bias_0 = np2th(weights[pjoin(ROOT, FC_0, "bias")]).t()
-            mlp_bias_1 = np2th(weights[pjoin(ROOT, FC_1, "bias")]).t()
+            if not getattr(self, "_ffn_is_kan", False):
+                print("Loading standard MLP weights (not KAN)")
+                mlp_weight_0 = np2th(weights[pjoin(ROOT, FC_0, "kernel")]).t()
+                mlp_weight_1 = np2th(weights[pjoin(ROOT, FC_1, "kernel")]).t()
+                mlp_bias_0 = np2th(weights[pjoin(ROOT, FC_0, "bias")]).t()
+                mlp_bias_1 = np2th(weights[pjoin(ROOT, FC_1, "bias")]).t()
 
-            self.ffn.fc1.weight.copy_(mlp_weight_0)
-            self.ffn.fc2.weight.copy_(mlp_weight_1)
-            self.ffn.fc1.bias.copy_(mlp_bias_0)
-            self.ffn.fc2.bias.copy_(mlp_bias_1)
+                self.ffn.fc1.weight.copy_(mlp_weight_0)
+                self.ffn.fc2.weight.copy_(mlp_weight_1)
+                self.ffn.fc1.bias.copy_(mlp_bias_0)
+                self.ffn.fc2.bias.copy_(mlp_bias_1)
 
             self.attention_norm.weight.copy_(np2th(weights[pjoin(ROOT, ATTENTION_NORM, "scale")]))
             self.attention_norm.bias.copy_(np2th(weights[pjoin(ROOT, ATTENTION_NORM, "bias")]))
@@ -305,22 +358,6 @@ class Transformer(nn.Module):
         embedding_output, features = self.embeddings(input_ids)
         encoded, attn_weights = self.encoder(embedding_output)  # (B, n_patch, hidden)
         return encoded, attn_weights, features
-
-class MambaTransformer(nn.Module):
-    """
-    Keeps the same interface: returns (encoded, attn_weights, features)
-    but here 'encoded' is already tokenized by MambaEmbeddings and we skip self-attention.
-    """
-    def __init__(self, config, img_size, vis, mamba_variant="MobileMamba_S6"):
-        super().__init__()
-        self.embeddings = MambaEmbeddings(config, img_size=img_size, mamba_variant=mamba_variant)
-        self.vis = vis
-        print("MambaTransformer initialized with variant:", mamba_variant)
-
-    def forward(self, input_ids):
-        tokens, features = self.embeddings(input_ids)  # (B, N, hidden), list of 4 feature maps
-        attn_weights = []  # no attention layers here
-        return tokens, attn_weights, features
 
 
 class Conv2dReLU(nn.Sequential):
@@ -440,11 +477,7 @@ class VisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.zero_head = zero_head
         self.classifier = config.classifier
-
-        # self.transformer = Transformer(config, img_size, vis)
-        mamba_variant = getattr(config, "mamba_variant", "MobileMamba_S6")
-        self.transformer = MambaTransformer(config, img_size, vis, mamba_variant=mamba_variant)
-        
+        self.transformer = Transformer(config, img_size, vis)
         self.decoder = DecoderCup(config)
         self.segmentation_head = SegmentationHead(
             in_channels=config['decoder_channels'][-1],
@@ -452,12 +485,12 @@ class VisionTransformer(nn.Module):
             kernel_size=3,
         )
         self.config = config
-        print("TransUnet with mobile-mamba Initiated")
+        print("TransUnet with Wave-KAN Initiated")
 
     def forward(self, x):
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)
-        x, attn_weights, features = self.transformer(x)  # (B, n+_patch, hidden)
+        x, attn_weights, features = self.transformer(x)  # (B, n_patch, hidden)
         x = self.decoder(x, features)
         logits = self.segmentation_head(x)
         return logits
@@ -466,7 +499,6 @@ class VisionTransformer(nn.Module):
         with torch.no_grad():
 
             res_weight = weights
-            
             self.transformer.embeddings.patch_embeddings.weight.copy_(np2th(weights["embedding/kernel"], conv=True))
             self.transformer.embeddings.patch_embeddings.bias.copy_(np2th(weights["embedding/bias"]))
 
@@ -521,8 +553,6 @@ CONFIGS = {
     'R50-ViT-B_16': configs.get_r50_b16_config(),
     'R50-ViT-L_16': configs.get_r50_l16_config(),
     'testing': configs.get_testing(),
-    'MAMBA-VSS': configs.get_mamba_vss_config(),
-    'MOBILE-MAMBA': configs.get_mobilemamba_config(),
 }
 
 

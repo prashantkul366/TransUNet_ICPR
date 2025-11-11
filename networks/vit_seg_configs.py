@@ -58,6 +58,7 @@ def get_r50_b16_config():
     config.activation = 'softmax'
 
     config.use_kan_ffn = True
+    config.wavelet_type = "mexican_hat"
     config.kan_grid_size = 5
     config.kan_spline_order = 3
     config.kan_scale_noise = 0.1
