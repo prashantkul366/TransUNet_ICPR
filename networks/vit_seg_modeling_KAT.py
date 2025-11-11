@@ -255,7 +255,6 @@ class Transformer(nn.Module):
         encoded, attn_weights = self.encoder(embedding_output)  # (B, n_patch, hidden)
         return encoded, attn_weights, features
 
-# --- NEW: KATransformerAdapter (drop-in replacement for Transformer) ---
 class KATransformerAdapter(nn.Module):
     """
     Wraps katransformer.py so it plugs into the existing TransUNet code
@@ -267,8 +266,8 @@ class KATransformerAdapter(nn.Module):
         self.vis = vis
         self.embeddings = Embeddings(config, img_size=img_size)
         print("Initializing KATransformer as encoder...")
-        # Import your KAT core here. Adjust the import/class name/args as needed.
-        from .katransformer import KATransformer  # or whatever class name you use
+
+        from .katransformer import KATransformer
 
         # IMPORTANT: Ensure the KAT encoder takes (B, N, C) and returns (B, N, C)
         # Map config into the KAT constructor. Tweak kwargs to your implementation.

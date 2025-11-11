@@ -17,8 +17,8 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.jit import Final
 
-from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD, \
-    OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+# from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD, \
+#     OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from timm.layers import PatchEmbed, DropPath, AttentionPoolLatent, RmsNorm, PatchDropout, SwiGLUPacked, \
     trunc_normal_, lecun_normal_, resample_patch_embed, resample_abs_pos_embed, use_fused_attn, \
     get_act_layer, get_norm_layer, LayerType
@@ -30,6 +30,27 @@ from timm.models.layers import to_2tuple
 
 import numpy as np
 
+try:
+    # most versions
+    from timm.data.constants import (
+        IMAGENET_DEFAULT_MEAN,
+        IMAGENET_DEFAULT_STD,
+        IMAGENET_INCEPTION_MEAN,
+        IMAGENET_INCEPTION_STD,
+        OPENAI_CLIP_MEAN,
+        OPENAI_CLIP_STD,
+    )
+except Exception:
+    # fallback for timm builds that lack OPENAI_CLIP_* (or even inception constants)
+    from timm.data.constants import (
+        IMAGENET_DEFAULT_MEAN,
+        IMAGENET_DEFAULT_STD,
+    )
+    # define missing constants
+    IMAGENET_INCEPTION_MEAN = (0.5, 0.5, 0.5)
+    IMAGENET_INCEPTION_STD  = (0.5, 0.5, 0.5)
+    OPENAI_CLIP_MEAN = (0.48145466, 0.4578275, 0.40821073)
+    OPENAI_CLIP_STD  = (0.26862954, 0.26130258, 0.27577711)
 
 __all__ = ['KAT']  # model_registry will add each entrypoint fn to this
 
