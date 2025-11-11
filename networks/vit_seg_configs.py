@@ -205,11 +205,23 @@ def get_mobilemamba_config():
     return config
 
 def get_kat_b16_config():
-    c = get_b16_config()              # or copy your current config and modify
-    c.backbone = "kat"                # tells the wrapper to use KAT
-    c.kat_variant = "kat_base_patch16_224.vitft"  # choose from: tiny/small/base (+ .vitft for “From ViT”)
-    c.kat_pretrained = True           # let timm auto-download the weights
-    c.hidden_size = 768               # must match the variant (192 tiny / 384 small / 768 base)
-    c.patches["size"] = 16            # KAT pretrained are patch16
-    c.n_skip = 0                      # no hybrid ResNet skips when using KAT
+    c = get_b16_config()                 # start from your ViT-B/16 base
+    c.backbone = "kat"
+
+    # KAT pretrained variants are patch16, and this field is typed as a tuple:
+    c.patches['size'] = (16, 16)
+
+    # KAT-B uses embed_dim=768 (tiny=192, small=384)
+    c.hidden_size = 768
+
+    # No ResNet hybrid skips when using KAT
+    c.n_skip = 0
+
+    # Tell the adapter which KAT checkpoint to use
+    c.kat_variant = "kat_base_patch16_224.vitft"   # or: kat_small_patch16_224(.vitft), kat_tiny_patch16_224(.vitft)
+    c.kat_pretrained = True
+
+    # Usual TransUNet fields (keep whatever you already have)
+    c.classifier = "seg"
+    # c.decoder_channels, c.skip_channels, etc. should already be in the base; n_skip=0 disables skips anyway
     return c
