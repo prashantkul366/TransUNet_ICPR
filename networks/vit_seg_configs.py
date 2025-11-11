@@ -190,6 +190,11 @@ def get_mobilemamba_config():
     # ← point to the exact file you just extracted
     config.mamba_pretrained_ckpt = "/content/drive/MyDrive/Prashant/TransUNet_ICPR/pretrained/MobileMamba_S6/mobilemamba_s6.pth"
 
+    config.transformer = ml_collections.ConfigDict()
+    config.transformer.dropout_rate = 0.0
+    config.transformer.attention_dropout_rate = 0.0
+
+
     # legacy keys (unused by MobileMamba path)
     config.patches = ml_collections.ConfigDict({'size': (16, 16)})
     config.classifier = 'seg'
