@@ -7,12 +7,12 @@ import torch
 import torch.backends.cudnn as cudnn
 
 ################################################################
-# from networks.vit_seg_modeling import VisionTransformer as ViT_seg
-# from networks.vit_seg_modeling_VSS import VisionTransformer as ViT_seg_VSS
-# from networks.vit_seg_modeling_KAN import VisionTransformer as ViT_seg_KAN
-# from networks.vit_seg_modeling_Mobile_Mamba import VisionTransformer as ViT_seg_Mobile_Mamba
+from networks.vit_seg_modeling import VisionTransformer as ViT_seg
+from networks.vit_seg_modeling_VSS import VisionTransformer as ViT_seg_VSS
+from networks.vit_seg_modeling_KAN import VisionTransformer as ViT_seg_KAN
+from networks.vit_seg_modeling_Mobile_Mamba import VisionTransformer as ViT_seg_Mobile_Mamba
 from networks.vit_seg_modeling_waveKAN import VisionTransformer as ViT_seg_waveKAN
-# from networks.vit_seg_modeling_KAT import VisionTransformer as ViT_seg_KAT
+from networks.vit_seg_modeling_KAT import VisionTransformer as ViT_seg_KAT
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse
@@ -140,13 +140,13 @@ if __name__ == "__main__":
 
     # WaveKAN
     ######################################################################################
-    net = ViT_seg_waveKAN(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
-    net.load_from(weights=np.load(config_vit.pretrained_path))
+    # net = ViT_seg_waveKAN(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net.load_from(weights=np.load(config_vit.pretrained_path))
     ######################################################################################
 
     # WaveKAN
     ######################################################################################
-    # net = ViT_seg_KAT(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    net = ViT_seg_KAT(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
     # net.load_from(weights=np.load(config_vit.pretrained_path))
     ######################################################################################
 

@@ -255,49 +255,93 @@ class Transformer(nn.Module):
         encoded, attn_weights = self.encoder(embedding_output)  # (B, n_patch, hidden)
         return encoded, attn_weights, features
 
+# class KATransformerAdapter(nn.Module):
+#     """
+#     Wraps katransformer.py so it plugs into the existing TransUNet code
+#     with identical inputs/outputs as the old Transformer:
+#         forward(x) -> (encoded, attn_weights, features)
+#     """
+#     def __init__(self, config, img_size, vis):
+#         super().__init__()
+#         self.vis = vis
+#         # self.embeddings = Embeddings(config, img_size=img_size)
+#         print("Initializing KATransformer as encoder...")
+
+#         # from .katransformer import KATransformer
+
+#         # IMPORTANT: Ensure the KAT encoder takes (B, N, C) and returns (B, N, C)
+#         # Map config into the KAT constructor. Tweak kwargs to your implementation.
+#         # self.encoder = KATransformer(
+#         #     embed_dim=config.hidden_size,
+#         #     depth=config.transformer["num_layers"],
+#         #     num_heads=config.transformer["num_heads"],
+#         #     mlp_ratio=getattr(config.transformer, "mlp_ratio", 4.0),
+#         #     drop_rate=config.transformer.get("dropout_rate", 0.0),
+#         #     attn_drop_rate=config.transformer.get("attention_dropout_rate", 0.0),
+#         #     # add any other KAT-specific params your implementation needs
+#         # )
+
+#         # If your KAT encoder does not internally apply a final LayerNorm, keep this to match old behavior
+#         # self.encoder_norm = LayerNorm(config.hidden_size, eps=1e-6)
+
+#     def forward(self, input_ids):
+#         # Same behavior as original Transformer
+#         embedding_output, features = self.embeddings(input_ids)  # (B, N, C) and ResNet features (if hybrid)
+#         out = self.encoder(embedding_output)
+
+#         # Some KAT implementations return (tokens, attn) or just tokens. Normalize and format outputs.
+#         if isinstance(out, tuple):
+#             tokens, kat_attn = out
+#         else:
+#             tokens, kat_attn = out, None
+
+#         encoded = self.encoder_norm(tokens)   # keep parity with original Encoder.encoder_norm
+#         attn_weights = kat_attn if self.vis else None
+#         return encoded, attn_weights, features
+
+
 class KATransformerAdapter(nn.Module):
     """
-    Wraps katransformer.py so it plugs into the existing TransUNet code
-    with identical inputs/outputs as the old Transformer:
-        forward(x) -> (encoded, attn_weights, features)
+    Adapter that builds a KAT encoder via timm.create_model and exposes
+    the same outputs as your old Transformer path:
+        forward(x) -> (encoded_tokens, attn_weights=None, features=None)
     """
     def __init__(self, config, img_size, vis):
         super().__init__()
         self.vis = vis
-        self.embeddings = Embeddings(config, img_size=img_size)
-        print("Initializing KATransformer as encoder...")
 
-        from .katransformer import KATransformer
+        # IMPORTANT: import the kat model module so its @register_model entrypoints exist.
+        import networks.katransformer  # noqa: F401
 
-        # IMPORTANT: Ensure the KAT encoder takes (B, N, C) and returns (B, N, C)
-        # Map config into the KAT constructor. Tweak kwargs to your implementation.
-        self.encoder = KATransformer(
-            embed_dim=config.hidden_size,
-            depth=config.transformer["num_layers"],
-            num_heads=config.transformer["num_heads"],
-            mlp_ratio=getattr(config.transformer, "mlp_ratio", 4.0),
-            drop_rate=config.transformer.get("dropout_rate", 0.0),
-            attn_drop_rate=config.transformer.get("attention_dropout_rate", 0.0),
-            # add any other KAT-specific params your implementation needs
+        from timm import create_model
+
+        variant = getattr(config, "kat_variant", "kat_base_patch16_224")
+        use_pretrained = bool(getattr(config, "kat_pretrained", True))
+
+        # Build a pure encoder (no head, no cls token)
+        self.encoder = create_model(
+            variant,
+            pretrained=use_pretrained,
+            num_classes=0,
+            global_pool='',
+            class_token=False,
         )
 
-        # If your KAT encoder does not internally apply a final LayerNorm, keep this to match old behavior
-        self.encoder_norm = LayerNorm(config.hidden_size, eps=1e-6)
+        # safety: ensure KAT embed dim matches your decoder’s expected hidden size
+        assert self.encoder.embed_dim == config.hidden_size, \
+            f"KAT embed_dim {self.encoder.embed_dim} != config.hidden_size {config.hidden_size}"
 
-    def forward(self, input_ids):
-        # Same behavior as original Transformer
-        embedding_output, features = self.embeddings(input_ids)  # (B, N, C) and ResNet features (if hybrid)
-        out = self.encoder(embedding_output)
+        # Final norm to mimic original pipeline’s Encoder.encoder_norm (harmless if already normalized)
+        self.post_norm = LayerNorm(config.hidden_size, eps=1e-6)
 
-        # Some KAT implementations return (tokens, attn) or just tokens. Normalize and format outputs.
-        if isinstance(out, tuple):
-            tokens, kat_attn = out
-        else:
-            tokens, kat_attn = out, None
-
-        encoded = self.encoder_norm(tokens)   # keep parity with original Encoder.encoder_norm
-        attn_weights = kat_attn if self.vis else None
+    def forward(self, x):
+        # KAT expects images (B,3,H,W) and returns tokens (B, N, C) when class_token=False
+        tokens = self.encoder.forward_features(x)   # (B, N, C)
+        encoded = self.post_norm(tokens)
+        attn_weights = None
+        features = None   # no hybrid features / skip maps
         return encoded, attn_weights, features
+
 
 class Conv2dReLU(nn.Sequential):
     def __init__(
@@ -498,6 +542,7 @@ CONFIGS = {
     'testing': configs.get_testing(),
     'MAMBA-VSS': configs.get_mamba_vss_config(),
     'MOBILE-MAMBA': configs.get_mobilemamba_config(),
+    'KAT' : configs.get_kat_b16_config(),
 }
 
 

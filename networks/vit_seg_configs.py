@@ -203,3 +203,13 @@ def get_mobilemamba_config():
     config.resnet_pretrained_path = None
     config.pretrained_path = None
     return config
+
+def get_kat_b16_config():
+    c = get_b16_config()              # or copy your current config and modify
+    c.backbone = "kat"                # tells the wrapper to use KAT
+    c.kat_variant = "kat_base_patch16_224.vitft"  # choose from: tiny/small/base (+ .vitft for “From ViT”)
+    c.kat_pretrained = True           # let timm auto-download the weights
+    c.hidden_size = 768               # must match the variant (192 tiny / 384 small / 768 base)
+    c.patches["size"] = 16            # KAT pretrained are patch16
+    c.n_skip = 0                      # no hybrid ResNet skips when using KAT
+    return c
