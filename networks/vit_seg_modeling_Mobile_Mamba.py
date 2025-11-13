@@ -18,7 +18,7 @@ from torch.nn.modules.utils import _pair
 from scipy import ndimage
 from . import vit_seg_configs as configs
 from .vit_seg_modeling_resnet_skip import ResNetV2
-from .mobilemamba import MobileMamba_S6
+
 
 logger = logging.getLogger(__name__)
 
@@ -164,57 +164,6 @@ class Embeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings, features
 
-class MambaEmbeddings(nn.Module):
-    """
-    A lightweight adapter:
-      - runs a MobileMamba backbone to get multi-scale features
-      - projects the last stage map to `hidden_size`
-      - flattens to (B, N, hidden) tokens
-      - manages a learnable positional embedding sized to N (lazy-initialized)
-      - returns (tokens, features) like the ViT Embeddings
-    """
-    def __init__(self, config, img_size, in_channels=3, mamba_variant="MobileMamba_S6"):
-        super().__init__()
-        self.config = config
-        self.img_size = _pair(img_size)
-
-        # build backbone (no classifier head)
-        if mamba_variant == "MobileMamba_S6":
-            self.backbone = MobileMamba_S6(num_classes=0)  # head = Identity
-            self.mamba_dims = [192, 384, 448]  # embed_dim for S6 (keep in sync with mobilemamba CFG)
-        else:
-            raise ValueError(f"Unsupported mamba_variant: {mamba_variant}")
-
-        c_last = self.mamba_dims[-1]  # channels at final stage
-        self.to_hidden = nn.Conv2d(c_last, config.hidden_size, kernel_size=1, stride=1, padding=0)
-
-        # Positional embeddings will be lazily created for the exact H*W we see at runtime
-        self.pos_embed = None
-        self.dropout = Dropout(config.transformer["dropout_rate"])
-
-    def forward(self, x):
-        # MobileMamba multi-scale features
-        last, skips = self.backbone.forward_features(x)  # last: (B, C_last, H, W)
-
-        # Project to hidden and flatten to tokens
-        x = self.to_hidden(last)                         # (B, hidden, H, W)
-        B, C, H, W = x.shape
-        n_patches = H * W
-        x = x.flatten(2).transpose(1, 2)                 # (B, N, hidden)
-
-        # Create/resize learnable pos embed for this N
-        if (self.pos_embed is None) or (self.pos_embed.size(1) != n_patches) or (self.pos_embed.size(2) != C):
-            # keep on same device/dtype
-            pe = torch.zeros(1, n_patches, C, device=x.device, dtype=x.dtype)
-            self.pos_embed = nn.Parameter(pe)  # learnable, like ViT
-
-        x = x + self.pos_embed
-        x = self.dropout(x)
-
-        # Return tokens and the raw skip features for the decoder
-        # We hand them out in low->high order: [s0(/16), s1(/16), s2(/32), s3(/64)]
-        return x, skips
-
 
 class Block(nn.Module):
     def __init__(self, config, vis):
@@ -306,22 +255,58 @@ class Transformer(nn.Module):
         encoded, attn_weights = self.encoder(embedding_output)  # (B, n_patch, hidden)
         return encoded, attn_weights, features
 
-class MambaTransformer(nn.Module):
+from .mobilemamba import MobileMamba_S6, MobileMamba_T4, MobileMamba_T2, MobileMamba_B1, MobileMamba_B2, MobileMamba_B4
+
+class MobileMambaFeatures(nn.Module):
     """
-    Keeps the same interface: returns (encoded, attn_weights, features)
-    but here 'encoded' is already tokenized by MambaEmbeddings and we skip self-attention.
+    Runs the MobileMamba backbone and exposes intermediate feature maps for the decoder.
+    Returns:
+      encoded_tokens: (B, n_patch, hidden)  — flattened bottleneck features
+      attn_weights:   [] (None)             — placeholder to keep API parity
+      features:       [f3, f2, f1]          — deepest -> shallowest skips
     """
-    def __init__(self, config, img_size, vis, mamba_variant="MobileMamba_S6"):
+    def __init__(self, variant="S6"):
         super().__init__()
-        self.embeddings = MambaEmbeddings(config, img_size=img_size, mamba_variant=mamba_variant)
-        self.vis = vis
-        print("MambaTransformer initialized with variant:", mamba_variant)
+        # Pick the variant you want, you can plumb this from your config
+        variant = variant.upper()
+        if   variant == "T2": self.mm = MobileMamba_T2(num_classes=0, fuse=False)
+        elif variant == "T4": self.mm = MobileMamba_T4(num_classes=0, fuse=False)
+        elif variant == "B1": self.mm = MobileMamba_B1(num_classes=0, fuse=False)
+        elif variant == "B2": self.mm = MobileMamba_B2(num_classes=0, fuse=False)
+        elif variant == "B4": self.mm = MobileMamba_B4(num_classes=0, fuse=False)
+        else:                 self.mm = MobileMamba_S6(num_classes=0, fuse=False)  # default
 
-    def forward(self, input_ids):
-        tokens, features = self.embeddings(input_ids)  # (B, N, hidden), list of 4 feature maps
-        attn_weights = []  # no attention layers here
-        return tokens, attn_weights, features
+        # Sanity: MobileMamba exposes these modules
+        assert hasattr(self.mm, "patch_embed")
+        assert hasattr(self.mm, "blocks1")
+        assert hasattr(self.mm, "blocks2")
+        assert hasattr(self.mm, "blocks3")
 
+        # Hidden size is the last stage width
+        self.hidden_size = self.mm.head.l.in_features  # equals embed_dim[-1]
+
+    def forward(self, x):
+        # Stage 0: patch embedding (downsample ×16 typically)
+        x0 = self.mm.patch_embed(x)        # (B, C0, H/16, W/16)
+
+        # Stage 1
+        f1 = self.mm.blocks1(x0)           # (B, C1, ~H/16, ~W/16)
+
+        # Downsample happens before/inside blocks2 in the model construction
+        f2 = self.mm.blocks2(f1)           # (B, C2, ~H/32, ~W/32)
+
+        # Downsample to final stage
+        f3 = self.mm.blocks3(f2)           # (B, C3, ~H/64, ~W/64) or ~H/32 depending on variant
+
+        # Bottleneck to token sequence for your DecoderCup
+        B, C, H, W = f3.shape
+        encoded_tokens = f3.flatten(2).transpose(1, 2)  # (B, H*W, C)
+        attn_weights = []  # not used, kept for compatibility
+
+        # Important: order deepest -> shallowest so DecoderCup can pick features[i]
+        # We pass 3 skips; set config.n_skip = 3 and config.skip_channels accordingly.
+        features = [f3, f2, f1]
+        return encoded_tokens, attn_weights, features
 
 class Conv2dReLU(nn.Sequential):
     def __init__(
@@ -440,11 +425,11 @@ class VisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.zero_head = zero_head
         self.classifier = config.classifier
-
         # self.transformer = Transformer(config, img_size, vis)
-        mamba_variant = getattr(config, "mamba_variant", "MobileMamba_S6")
-        self.transformer = MambaTransformer(config, img_size, vis, mamba_variant=mamba_variant)
-        
+        self.transformer = MobileMambaFeatures(
+            variant=getattr(config, "mobilemamba_variant", "S6")
+        )
+        config.hidden_size = self.transformer.hidden_size
         self.decoder = DecoderCup(config)
         self.segmentation_head = SegmentationHead(
             in_channels=config['decoder_channels'][-1],
@@ -452,7 +437,7 @@ class VisionTransformer(nn.Module):
             kernel_size=3,
         )
         self.config = config
-        print("TransUnet with mobile-mamba Initiated")
+        print("TransUnet with Mobile mamba Initiated")
 
     def forward(self, x):
         if x.size()[1] == 1:
@@ -466,7 +451,6 @@ class VisionTransformer(nn.Module):
         with torch.no_grad():
 
             res_weight = weights
-            
             self.transformer.embeddings.patch_embeddings.weight.copy_(np2th(weights["embedding/kernel"], conv=True))
             self.transformer.embeddings.patch_embeddings.bias.copy_(np2th(weights["embedding/bias"]))
 
@@ -523,6 +507,7 @@ CONFIGS = {
     'testing': configs.get_testing(),
     'MAMBA-VSS': configs.get_mamba_vss_config(),
     'MOBILE-MAMBA': configs.get_mobilemamba_config(),
+    'KAT' : configs.get_kat_b16_config(),
 }
 
 

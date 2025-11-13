@@ -3,59 +3,13 @@ import itertools
 import torch.nn as nn
 from timm.models.vision_transformer import trunc_normal_
 from timm.models.layers import SqueezeExcite
-# from model import MODEL
-# from networks.model_reg import MODEL
-from networks.model_reg import MODEL, load_checkpoint
-
-# from model.lib_mamba.vmambanew import SS2D
-from networks.vmambanew import SS2D
+from model import MODEL
+from model.lib_mamba.vmambanew import SS2D
 import torch.nn.functional as F
 from functools import partial
 import pywt
 import pywt.data
-# from timm.layers import DropPath
-
-# --- timm compatibility (newer vs older) ---
-# try:
-#     # Newer timm (>=0.9) paths
-#     from timm.layers import DropPath, SqueezeExcite, trunc_normal_
-# except Exception:
-#     # Older timm (<0.9) fallback paths
-#     from timm.models.layers import DropPath, SqueezeExcite, trunc_normal_
-
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
-    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
-        super(DropPath, self).__init__()
-        self.drop_prob = drop_prob
-        self.scale_by_keep = scale_by_keep
-
-    def forward(self, x):
-        return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
-
-    def extra_repr(self):
-        return f'drop_prob={round(self.drop_prob,3):0.3f}'
-
-def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
-
-    """
-    if drop_prob == 0. or not training:
-        return x
-    keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
-    if keep_prob > 0.0 and scale_by_keep:
-        random_tensor.div_(keep_prob)
-    return x * random_tensor
-
+from timm.layers import DropPath
 
 def create_wavelet_filter(wave, in_size, out_size, type=torch.float):
     w = pywt.Wavelet(wave)
@@ -480,22 +434,6 @@ class MobileMamba(torch.nn.Module):
     def no_weight_decay(self):
         return {x for x in self.state_dict().keys() if 'attention_biases' in x}
 
-    def forward_features(self, x):
-        """
-        Returns:
-        y3: final high-level feature map (C3 channels, lowest spatial resolution)
-        skips: [s0, s1, s2, s3] from low->high level
-                s0: after patch_embed
-                s1: after blocks1
-                s2: after blocks2 (after PatchMerging 1)
-                s3: after blocks3 (after PatchMerging 2)
-        """
-        s0 = self.patch_embed(x)   # /16
-        s1 = self.blocks1(s0)      # /16
-        s2 = self.blocks2(s1)      # /32
-        s3 = self.blocks3(s2)      # /64
-        return s3, [s0, s1, s2, s3]
-    
     def forward(self, x):
         x = self.patch_embed(x)
         x = self.blocks1(x)

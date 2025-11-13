@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
     # MobileMamba
     ######################################################################################
-    # net = ViT_seg_Mobile_Mamba(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    net = ViT_seg_Mobile_Mamba(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
     # net.load_from(config_vit)
     ######################################################################################
 
@@ -153,8 +153,8 @@ if __name__ == "__main__":
 
     # TRANSFORMER WITH fJNB - KAN 
     ######################################################################################
-    net = ViT_seg_KAN_fJNB(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
-    net.load_from(weights=np.load(config_vit.pretrained_path))
+    # net = ViT_seg_KAN_fJNB(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net.load_from(weights=np.load(config_vit.pretrained_path))
     ######################################################################################
 
 

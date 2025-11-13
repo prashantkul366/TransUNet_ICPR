@@ -176,33 +176,72 @@ def get_mamba_vss_config():
 
     return config
 
-def get_mobilemamba_config():
-    config = ml_collections.ConfigDict()
-    config.backbone = 'mobilemamba'
-    config.mamba_variant = 'MobileMamba_S6'   # ← matches the S6 weights you have
-    config.hidden_size = 768
-    config.decoder_channels = (256, 128, 64, 32)
-    config.n_classes = 2
-    config.activation = 'softmax'
+def _mobilemamba_variant_specs(variant: str):
+    """
+    Returns (img_size, embed_dim) for a given MobileMamba variant name.
+    Keep this in sync with mobilemamba.py CFG_*.
+    """
+    v = variant.upper()
+    table = {
+        "T2": (192, [144, 272, 368]),
+        "T4": (192, [176, 368, 448]),
+        "S6": (224, [192, 384, 448]),
+        "B1": (256, [200, 376, 448]),
+        "B2": (384, [200, 376, 448]),
+        "B4": (512, [200, 376, 448]),
+    }
+    if v not in table:
+        v = "S6"  # sensible default
+    return table[v]
 
-    config.n_skip = 4
-    config.skip_channels = [192, 192, 384, 448]
 
-    # ← point to the exact file you just extracted
-    config.mamba_pretrained_ckpt = "/content/drive/MyDrive/Prashant/TransUNet_ICPR/pretrained/MobileMamba_S6/mobilemamba_s6.pth"
+def get_mobilemamba_config(
+    n_classes: int = 2,
+    decoder_channels=(256, 128, 64, 16),
+    mobilemamba_variant: str = "S6",
+    n_skip: int = 3,
+):
+    """
+    Config for using MobileMamba as the encoder/backbone in TransUNet-style model.
+    Matches the expectations of vit_seg_modelling_mobile_mamba.py after you swap in MobileMambaFeatures.
+    """
+    cfg = ml_collections.ConfigDict()
+    cfg.backbone = "mobilemamba"
 
-    config.transformer = ml_collections.ConfigDict()
-    config.transformer.dropout_rate = 0.0
-    config.transformer.attention_dropout_rate = 0.0
+    # Variant-specific widths (embed_dim) and a nominal input size (not strictly required here)
+    img_size, embed_dim = _mobilemamba_variant_specs(mobilemamba_variant)
+    C1, C2, C3 = embed_dim  # shallow -> deep per your MobileMamba
 
+    # The decoder consumes the encoder bottleneck as 'hidden_size'
+    cfg.hidden_size = C3
 
-    # legacy keys (unused by MobileMamba path)
-    config.patches = ml_collections.ConfigDict({'size': (16, 16)})
-    config.classifier = 'seg'
-    config.representation_size = None
-    config.resnet_pretrained_path = None
-    config.pretrained_path = None
-    return config
+    # TransUNet head settings
+    cfg.decoder_channels = tuple(decoder_channels)
+    cfg.n_classes = int(n_classes)
+    cfg.activation = "softmax"  # use "sigmoid" for binary w/o one-hot targets
+
+    # Skip connections: provide deepest->shallowest (DecoderCup expects features[i])
+    # We’ll pass features as [f3, f2, f1], so skip_channels should be [C3, C2, C1, 0]
+    cfg.n_skip = int(n_skip)
+    if cfg.n_skip > 0:
+        cfg.skip_channels = [C3, C2, C1, 0]
+    else:
+        cfg.skip_channels = [0, 0, 0, 0]
+
+    # Keep keys some code paths expect even if not used by MobileMamba
+    cfg.patches = ml_collections.ConfigDict({"size": (4, 4)})  # dummy; ViT-only code ignores for MobileMamba
+    cfg.classifier = "seg"
+    cfg.representation_size = None
+    cfg.resnet_pretrained_path = None
+    cfg.pretrained_path = None
+
+    # Let the model wrapper know which MobileMamba variant to instantiate
+    cfg.mobilemamba_variant = mobilemamba_variant
+
+    # (Optional) expose img_size so your training script can set datasets/transforms accordingly
+    cfg.img_size = img_size
+
+    return cfg
 
 def get_kat_b16_config():
     c = get_b16_config()                 # start from your ViT-B/16 base
