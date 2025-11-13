@@ -328,7 +328,7 @@ class Conv2dReLU(nn.Sequential):
 
         super(Conv2dReLU, self).__init__(conv, bn, relu)
 
-
+import torch.nn.functional as F
 class DecoderBlock(nn.Module):
     def __init__(
             self,
@@ -355,9 +355,16 @@ class DecoderBlock(nn.Module):
         self.up = nn.UpsamplingBilinear2d(scale_factor=2)
 
     def forward(self, x, skip=None):
-        x = self.up(x)
+        # x = self.up(x)
+        # if skip is not None:
+        #     x = torch.cat([x, skip], dim=1)
+
         if skip is not None:
+            x = F.interpolate(x, size=skip.shape[-2:], mode="bilinear", align_corners=False)
             x = torch.cat([x, skip], dim=1)
+        else:
+            x = F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False)
+
         x = self.conv1(x)
         x = self.conv2(x)
         return x
