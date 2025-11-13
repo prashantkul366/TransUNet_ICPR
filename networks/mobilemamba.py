@@ -3,8 +3,10 @@ import itertools
 import torch.nn as nn
 from timm.models.vision_transformer import trunc_normal_
 from timm.models.layers import SqueezeExcite
-from model import MODEL
-from model.lib_mamba.vmambanew import SS2D
+# from model import MODEL
+from .model_reg import MODEL
+# from model.lib_mamba.vmambanew import SS2D'
+from .vmambanew import SS2D
 import torch.nn.functional as F
 from functools import partial
 import pywt
