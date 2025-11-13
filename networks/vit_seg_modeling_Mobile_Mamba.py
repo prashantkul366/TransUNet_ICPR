@@ -299,7 +299,8 @@ class MobileMambaFeatures(nn.Module):
 
         B, C, H, W = f3.shape
         tokens = f3.flatten(2).transpose(1, 2)    # (B, H*W, C)
-        features = [f3, f2, f1]                   # deepest -> shallowest
+        # features = [f3, f2, f1]                   # deepest -> shallowest
+        features = [f2, f1]
         return tokens, [], features
     
 
