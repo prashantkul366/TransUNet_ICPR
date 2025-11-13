@@ -13,6 +13,7 @@ from networks.vit_seg_modeling_KAN import VisionTransformer as ViT_seg_KAN
 from networks.vit_seg_modeling_Mobile_Mamba import VisionTransformer as ViT_seg_Mobile_Mamba
 from networks.vit_seg_modeling_waveKAN import VisionTransformer as ViT_seg_waveKAN
 from networks.vit_seg_modeling_KAT import VisionTransformer as ViT_seg_KAT
+from networks.vit_seg_modeling_KAN_fJNB import VisionTransformer as ViT_seg_KAN_fJNB
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse
@@ -144,11 +145,18 @@ if __name__ == "__main__":
     # net.load_from(weights=np.load(config_vit.pretrained_path))
     ######################################################################################
 
-    # WaveKAN
+    # KAT Transformer
     ######################################################################################
-    net = ViT_seg_KAT(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net = ViT_seg_KAT(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
     # net.load_from(weights=np.load(config_vit.pretrained_path))
     ######################################################################################
+
+    # TRANSFORMER WITH fJNB - KAN 
+    ######################################################################################
+    net = ViT_seg_KAN_fJNB(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    net.load_from(weights=np.load(config_vit.pretrained_path))
+    ######################################################################################
+
 
     # trainer = {'Synapse': trainer_synapse,}
     trainer = {'BUSI': trainer_synapse,}
