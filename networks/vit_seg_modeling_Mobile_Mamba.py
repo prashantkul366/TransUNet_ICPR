@@ -255,58 +255,53 @@ class Transformer(nn.Module):
         encoded, attn_weights = self.encoder(embedding_output)  # (B, n_patch, hidden)
         return encoded, attn_weights, features
 
-from .mobilemamba import MobileMamba_S6, MobileMamba_T4, MobileMamba_T2, MobileMamba_B1, MobileMamba_B2, MobileMamba_B4
+# from .mobilemamba import MobileMamba_S6, MobileMamba_T4, MobileMamba_T2, MobileMamba_B1, MobileMamba_B2, MobileMamba_B4
+
+from .mobilemamba import (
+    MobileMamba_S6, MobileMamba_T4, MobileMamba_T2, MobileMamba_B1, MobileMamba_B2, MobileMamba_B4,
+    CFG_MobileMamba_S6, CFG_MobileMamba_T4, CFG_MobileMamba_T2, CFG_MobileMamba_B1, CFG_MobileMamba_B2, CFG_MobileMamba_B4
+)
+
+_VARIANT_TO_CFG = {
+    "S6": CFG_MobileMamba_S6,
+    "T4": CFG_MobileMamba_T4,
+    "T2": CFG_MobileMamba_T2,
+    "B1": CFG_MobileMamba_B1,
+    "B2": CFG_MobileMamba_B2,
+    "B4": CFG_MobileMamba_B4,
+}
+
 
 class MobileMambaFeatures(nn.Module):
-    """
-    Runs the MobileMamba backbone and exposes intermediate feature maps for the decoder.
-    Returns:
-      encoded_tokens: (B, n_patch, hidden)  — flattened bottleneck features
-      attn_weights:   [] (None)             — placeholder to keep API parity
-      features:       [f3, f2, f1]          — deepest -> shallowest skips
-    """
     def __init__(self, variant="S6"):
         super().__init__()
-        # Pick the variant you want, you can plumb this from your config
-        variant = variant.upper()
-        if   variant == "T2": self.mm = MobileMamba_T2(num_classes=0, fuse=False)
-        elif variant == "T4": self.mm = MobileMamba_T4(num_classes=0, fuse=False)
-        elif variant == "B1": self.mm = MobileMamba_B1(num_classes=0, fuse=False)
-        elif variant == "B2": self.mm = MobileMamba_B2(num_classes=0, fuse=False)
-        elif variant == "B4": self.mm = MobileMamba_B4(num_classes=0, fuse=False)
-        else:                 self.mm = MobileMamba_S6(num_classes=0, fuse=False)  # default
+        v = variant.upper()
+        if   v == "T2": self.mm = MobileMamba_T2(num_classes=0, fuse=False)
+        elif v == "T4": self.mm = MobileMamba_T4(num_classes=0, fuse=False)
+        elif v == "B1": self.mm = MobileMamba_B1(num_classes=0, fuse=False)
+        elif v == "B2": self.mm = MobileMamba_B2(num_classes=0, fuse=False)
+        elif v == "B4": self.mm = MobileMamba_B4(num_classes=0, fuse=False)
+        else:           self.mm = MobileMamba_S6(num_classes=0, fuse=False)
 
-        # Sanity: MobileMamba exposes these modules
-        assert hasattr(self.mm, "patch_embed")
-        assert hasattr(self.mm, "blocks1")
-        assert hasattr(self.mm, "blocks2")
-        assert hasattr(self.mm, "blocks3")
+        # Derive hidden size from the variant’s embed_dim, not from the (Identity) head
+        cfg = _VARIANT_TO_CFG.get(v, CFG_MobileMamba_S6)
+        embed_dim = cfg['embed_dim']              # e.g., [192, 384, 448]
+        self.hidden_size = embed_dim[-1]          # 448 for S6
 
-        # Hidden size is the last stage width
-        self.hidden_size = self.mm.head.l.in_features  # equals embed_dim[-1]
+        assert hasattr(self.mm, "patch_embed") and hasattr(self.mm, "blocks1") \
+               and hasattr(self.mm, "blocks2") and hasattr(self.mm, "blocks3")
 
     def forward(self, x):
-        # Stage 0: patch embedding (downsample ×16 typically)
-        x0 = self.mm.patch_embed(x)        # (B, C0, H/16, W/16)
+        x0 = self.mm.patch_embed(x)   # (B, C1, H/16, W/16)
+        f1 = self.mm.blocks1(x0)      # (B, C1, H/16, W/16)
+        f2 = self.mm.blocks2(f1)      # (B, C2, H/32, W/32)
+        f3 = self.mm.blocks3(f2)      # (B, C3, H/32 or H/64, W/32 or W/64)
 
-        # Stage 1
-        f1 = self.mm.blocks1(x0)           # (B, C1, ~H/16, ~W/16)
-
-        # Downsample happens before/inside blocks2 in the model construction
-        f2 = self.mm.blocks2(f1)           # (B, C2, ~H/32, ~W/32)
-
-        # Downsample to final stage
-        f3 = self.mm.blocks3(f2)           # (B, C3, ~H/64, ~W/64) or ~H/32 depending on variant
-
-        # Bottleneck to token sequence for your DecoderCup
         B, C, H, W = f3.shape
-        encoded_tokens = f3.flatten(2).transpose(1, 2)  # (B, H*W, C)
-        attn_weights = []  # not used, kept for compatibility
-
-        # Important: order deepest -> shallowest so DecoderCup can pick features[i]
-        # We pass 3 skips; set config.n_skip = 3 and config.skip_channels accordingly.
-        features = [f3, f2, f1]
-        return encoded_tokens, attn_weights, features
+        tokens = f3.flatten(2).transpose(1, 2)    # (B, H*W, C)
+        features = [f3, f2, f1]                   # deepest -> shallowest
+        return tokens, [], features
+    
 
 class Conv2dReLU(nn.Sequential):
     def __init__(
@@ -429,7 +424,7 @@ class VisionTransformer(nn.Module):
         self.transformer = MobileMambaFeatures(
             variant=getattr(config, "mobilemamba_variant", "S6")
         )
-        config.hidden_size = self.transformer.hidden_size
+        config.hidden_size = getattr(config, "hidden_size", None) or self.transformer.hidden_size
         self.decoder = DecoderCup(config)
         self.segmentation_head = SegmentationHead(
             in_channels=config['decoder_channels'][-1],
