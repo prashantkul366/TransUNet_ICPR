@@ -19,6 +19,7 @@ from scipy import ndimage
 from . import vit_seg_configs as configs
 from .vit_seg_modeling_resnet_skip import ResNetV2
 
+from .segmamba import MambaEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +256,49 @@ class Transformer(nn.Module):
         encoded, attn_weights = self.encoder(embedding_output)  # (B, n_patch, hidden)
         return encoded, attn_weights, features
 
+class TSMambaAdapter(nn.Module):
+    """
+    Drop-in replacement for Transformer(...) that wraps MambaEncoder
+    and exposes (encoded_tokens, attn_weights=None, features) for DecoderCup.
+    """
+    def __init__(self, config, img_size, vis=False):
+        super().__init__()
+        self.config = config
+        self.vis = vis
+        self.hidden_size = config.hidden_size  # 384
+        print("Initializing TSMamba Adapter...")
+        # Re-use your SegMamba.MambaEncoder, but 2D if needed
+        self.backbone = MambaEncoder(
+            in_chans=1,                      # or 3 for RGB
+            depths=config.mamba_depths,
+            dims=config.mamba_dims,
+            drop_path_rate=getattr(config, "mamba_drop_rate", 0.0),
+            layer_scale_init_value=1e-6,
+        )
+
+    def forward(self, x):
+        # x: (B, C, 224, 224)
+        # MambaEncoder returns 4 feature maps: outs[0..3]
+        outs = self.backbone(x)   # tuple of 4 tensors
+
+        f0, f1, f2, f3 = outs     # 112, 56, 28, 14
+
+        # bottleneck: f3 (B, 384, 14, 14)
+        B, C, H, W = f3.shape
+        n_patches = H * W  # should be 196 for 14×14
+
+        # flatten to tokens: (B, n_patches, hidden_size)
+        tokens = f3.flatten(2).transpose(1, 2)  # (B, 196, 384)
+
+        # 3 skip connections for DecoderCup
+        features = [
+            f2,  # (B, 192, 28, 28)
+            f1,  # (B, 96, 56, 56)
+            f0,  # (B, 48, 112, 112)
+        ]
+
+        attn_weights = None  # no attention maps here
+        return tokens, attn_weights, features
 
 class Conv2dReLU(nn.Sequential):
     def __init__(
@@ -373,7 +417,8 @@ class VisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.zero_head = zero_head
         self.classifier = config.classifier
-        self.transformer = Transformer(config, img_size, vis)
+        # self.transformer = Transformer(config, img_size, vis)
+        self.transformer = TSMambaAdapter(config, img_size, vis=False)
         self.decoder = DecoderCup(config)
         self.segmentation_head = SegmentationHead(
             in_channels=config['decoder_channels'][-1],
@@ -381,7 +426,7 @@ class VisionTransformer(nn.Module):
             kernel_size=3,
         )
         self.config = config
-        print("TransUnet Initiated")
+        print("TSMamba Encoder with Transunet decoder Initiated")
 
     def forward(self, x):
         if x.size()[1] == 1:
@@ -452,6 +497,7 @@ CONFIGS = {
     'MAMBA-VSS': configs.get_mamba_vss_config(),
     'MOBILE-MAMBA': configs.get_mobilemamba_config(),
     'KAT' : configs.get_kat_b16_config(),
+    'TS-MAMBA': configs.get_tsmamba_config(),
 }
 
 
