@@ -244,14 +244,14 @@ class Embeddings(nn.Module):
 
     def forward(self, x):
         # x: (B, 3, 224, 224)
-        print("Input image:", x.shape)
+        # print("Input image:", x.shape)
         features = None   # no ResNet features
 
         x = self.patch_embeddings(x)       # (B, D, 14, 14) if patch_size=16
-        print("After patch embeddings:", x.shape)
+        # print("After patch embeddings:", x.shape)
         x = x.flatten(2)                   # (B, D, 196)
         x = x.transpose(-1, -2)            # (B, 196, D)
-        print("Tokens shape:", x.shape)  
+        # print("Tokens shape:", x.shape)  
 
         embeddings = x + self.position_embeddings  # (B, 196, D)
         embeddings = self.dropout(embeddings)
@@ -286,7 +286,7 @@ class T_Block(nn.Module):
         self.attention_norm = LayerNorm(config.hidden_size, eps=1e-6)
         self.ffn_norm = LayerNorm(config.hidden_size, eps=1e-6)
 
-        print("Transformer block with MDTA + KAN MLP initiated")
+        # print("Transformer block with MDTA + KAN MLP initiated")
         # ############################################################
         # # self.ffn = Mlp(config)
         # self.ffn = KANMLP(config)
@@ -358,7 +358,7 @@ class M_Block(nn.Module):
         self.ffn_norm = LayerNorm(config.hidden_size, eps=1e-6)
         self.vis = vis
 
-        print("Block with MambaVisionMixer + fJNB KAN instead of MLP initiated")
+        # print("Block with MambaVisionMixer + fJNB KAN instead of MLP initiated")
         
         self.attn = MambaVisionMixer(
             d_model=config.hidden_size,
@@ -544,24 +544,24 @@ class Transformer(nn.Module):
         for stage in self.stages:
             t_block, m_block = stage
 
-            print(f"\n--- Stage {stage} ---")
-            print("Before T_Block:", x.shape)
+            # print(f"\n--- Stage {stage} ---")
+            # print("Before T_Block:", x.shape)
             # Transformer block
             x, w_t = t_block(x)
             if self.vis:
                 all_attn_weights.append(w_t)
 
-            print("After T_Block:", x.shape)
+            # print("After T_Block:", x.shape)
             # Mamba block
             x, w_m = m_block(x)
             if self.vis:
                 all_attn_weights.append(w_m)
 
-            print("After M_Block:", x.shape)
+            # print("After M_Block:", x.shape)
 
             # Convert tokens to feature map for skip: (B, D, H, W)
             feat = x.permute(0, 2, 1).reshape(B, D, H, W)
-            print("Skip feat (14x14):", feat.shape)
+            # print("Skip feat (14x14):", feat.shape)
             skip_features.append(feat)
 
         x = self.encoder_norm(x)   # final encoded tokens, (B, 196, D)
@@ -621,9 +621,9 @@ class DecoderBlock(nn.Module):
 
     def forward(self, x, skip=None):
 
-        print("\nDecoderBlock - input x:", x.shape)
+        # print("\nDecoderBlock - input x:", x.shape)
         x = self.up(x)
-        print("After upsample:", x.shape)
+        # print("After upsample:", x.shape)
 
         if skip is not None:
             if skip.shape[2:] != x.shape[2:]:
@@ -633,7 +633,7 @@ class DecoderBlock(nn.Module):
                     mode="bilinear",
                     align_corners=False,
                 )
-                print("Resized skip:", skip.shape)
+                # print("Resized skip:", skip.shape)
 
             x = torch.cat([x, skip], dim=1)
 
@@ -642,9 +642,9 @@ class DecoderBlock(nn.Module):
 
 
         x = self.conv1(x)
-        print("After conv1:", x.shape)
+        # print("After conv1:", x.shape)
         x = self.conv2(x)
-        print("After conv2:", x.shape)
+        # print("After conv2:", x.shape)
         return x
 
 
@@ -688,18 +688,18 @@ class DecoderCup(nn.Module):
     def forward(self, hidden_states, features=None):
         B, n_patch, hidden = hidden_states.size()  # reshape from (B, n_patch, hidden) to (B, h, w, hidden)
         h, w = int(np.sqrt(n_patch)), int(np.sqrt(n_patch))
-        print("\nDecoderCup input:", hidden_states.shape)
+        # print("\nDecoderCup input:", hidden_states.shape)
         x = hidden_states.permute(0, 2, 1)
         x = x.contiguous().view(B, hidden, h, w)
         x = self.conv_more(x)
         for i, decoder_block in enumerate(self.blocks):
-            print(f"\n-- Decoder block {i} --")
+            # print(f"\n-- Decoder block {i} --")
             if features is not None:
                 skip = features[i] if (i < self.config.n_skip) else None
             else:
                 skip = None
             x = decoder_block(x, skip=skip)
-            print("Output of decoder_block:", x.shape)
+            # print("Output of decoder_block:", x.shape)
 
         return x
 
@@ -718,7 +718,7 @@ class VisionTransformer(nn.Module):
             kernel_size=3,
         )
         self.config = config
-        print("Proposed Hybrid Model Created")
+        # print("Proposed Hybrid Model Created")
 
     def forward(self, x):
         if x.size()[1] == 1:
@@ -726,7 +726,7 @@ class VisionTransformer(nn.Module):
         x, attn_weights, features = self.transformer(x)  # (B, n_patch, hidden)
         x = self.decoder(x, features)
         logits = self.segmentation_head(x)
-        print("Final logits:", logits.shape)
+        # print("Final logits:", logits.shape)
         return logits
 
    
