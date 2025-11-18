@@ -57,7 +57,6 @@ class MambaLayer(nn.Module):
                 d_conv=d_conv,    # Local convolution width
                 expand=expand,    # Block expansion factor
                 bimamba_type="v3",
-                nslices=num_slices,
         )
     
     def forward(self, x):
