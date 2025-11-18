@@ -56,6 +56,7 @@ class MambaLayer(nn.Module):
                 d_state=d_state,  # SSM state expansion factor
                 d_conv=d_conv,    # Local convolution width
                 expand=expand,    # Block expansion factor
+                bimamba_type="v2",
         )
     
     def forward(self, x):
@@ -85,6 +86,21 @@ class MlpChannel(nn.Module):
         x = self.act(x)
         x = self.fc2(x)
         return x
+    
+class MlpChannel2D(nn.Module):
+    def __init__(self, hidden_size, mlp_dim):
+        super().__init__()
+        self.fc1 = nn.Conv2d(hidden_size, mlp_dim, 1)
+        self.act = nn.GELU()
+        self.fc2 = nn.Conv2d(mlp_dim, hidden_size, 1)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.fc2(x)
+        return x
+
+
 
 class GSC(nn.Module):
     def __init__(self, in_channles) -> None:
@@ -128,6 +144,48 @@ class GSC(nn.Module):
         x = self.nonliner4(x)
         
         return x + x_residual
+
+class GSC2D(nn.Module):
+    def __init__(self, in_channels) -> None:
+        super().__init__()
+
+        self.proj  = nn.Conv2d(in_channels, in_channels, 3, 1, 1)
+        self.norm  = nn.InstanceNorm2d(in_channels)
+        self.act   = nn.ReLU()
+
+        self.proj2 = nn.Conv2d(in_channels, in_channels, 3, 1, 1)
+        self.norm2 = nn.InstanceNorm2d(in_channels)
+        self.act2  = nn.ReLU()
+
+        self.proj3 = nn.Conv2d(in_channels, in_channels, 1, 1, 0)
+        self.norm3 = nn.InstanceNorm2d(in_channels)
+        self.act3  = nn.ReLU()
+
+        self.proj4 = nn.Conv2d(in_channels, in_channels, 1, 1, 0)
+        self.norm4 = nn.InstanceNorm2d(in_channels)
+        self.act4  = nn.ReLU()
+
+    def forward(self, x):
+        x_res = x
+
+        x1 = self.proj(x)
+        x1 = self.norm(x1)
+        x1 = self.act(x1)
+
+        x1 = self.proj2(x1)
+        x1 = self.norm2(x1)
+        x1 = self.act2(x1)
+
+        x2 = self.proj3(x)
+        x2 = self.norm3(x2)
+        x2 = self.act3(x2)
+
+        x = x1 + x2
+        x = self.proj4(x)
+        x = self.norm4(x)
+        x = self.act4(x)
+
+        return x + x_res
 
 class MambaEncoder(nn.Module):
     def __init__(self, in_chans=1, depths=[2, 2, 2, 2], dims=[48, 96, 192, 384],
@@ -189,6 +247,80 @@ class MambaEncoder(nn.Module):
     def forward(self, x):
         x = self.forward_features(x)
         return x
+
+class MambaEncoder2D(nn.Module):
+    def __init__(
+        self,
+        in_chans=1,
+        depths=[2, 2, 2, 2],
+        dims=[48, 96, 192, 384],
+        drop_path_rate=0.0,
+        layer_scale_init_value=1e-6,
+        out_indices=[0, 1, 2, 3],
+    ):
+        super().__init__()
+
+        # stem: downsample to H/2
+        self.downsample_layers = nn.ModuleList()
+        stem = nn.Sequential(
+            nn.Conv2d(in_chans, dims[0], kernel_size=7, stride=2, padding=3),
+        )
+        self.downsample_layers.append(stem)
+
+        # 3 more downsampling stages: H/4, H/8, H/16
+        for i in range(3):
+            downsample_layer = nn.Sequential(
+                nn.InstanceNorm2d(dims[i]),
+                nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
+            )
+            self.downsample_layers.append(downsample_layer)
+
+        # Mamba stages + GSC2D at each resolution
+        self.stages = nn.ModuleList()
+        self.gscs   = nn.ModuleList()
+        num_slices_list = [64, 32, 16, 8]  # can keep these as-is
+
+        for i in range(4):
+            gsc = GSC2D(dims[i])
+            stage = nn.Sequential(
+                *[MambaLayer(dim=dims[i], num_slices=num_slices_list[i]) for _ in range(depths[i])]
+            )
+            self.gscs.append(gsc)
+            self.stages.append(stage)
+
+        self.out_indices = out_indices
+
+        # normalization + channel-MLP for outputs
+        self.mlps = nn.ModuleList()
+        for i_layer in range(4):
+            norm = nn.InstanceNorm2d(dims[i_layer])
+            setattr(self, f"norm2d_{i_layer}", norm)
+            self.mlps.append(MlpChannel2D(dims[i_layer], 2 * dims[i_layer]))
+
+    def forward_features(self, x):
+        """
+        x: (B, C, H, W)  with H=W=224 (for your case)
+        returns 4 feature maps:
+          outs[0]: H/2   = 112×112
+          outs[1]: H/4   = 56×56
+          outs[2]: H/8   = 28×28
+          outs[3]: H/16  = 14×14
+        """
+        outs = []
+        for i in range(4):
+            x = self.downsample_layers[i](x)
+            x = self.gscs[i](x)
+            x = self.stages[i](x)
+
+            if i in self.out_indices:
+                norm_layer = getattr(self, f"norm2d_{i}")
+                x_out = norm_layer(x)
+                x_out = self.mlps[i](x_out)
+                outs.append(x_out)
+        return tuple(outs)
+
+    def forward(self, x):
+        return self.forward_features(x)
 
 class SegMamba(nn.Module):
     def __init__(

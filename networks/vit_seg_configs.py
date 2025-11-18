@@ -270,32 +270,30 @@ def get_tsmamba_config(
     n_classes: int = 2,
     decoder_channels=(256, 128, 64, 16),
     n_skip: int = 3,
-    ):
+):
     c = ml_collections.ConfigDict()
     c.backbone = "tsmamba"
 
-    # Mamba channels (from SegMamba): [48, 96, 192, 384]
     c.mamba_dims   = [48, 96, 192, 384]
     c.mamba_depths = [2, 2, 2, 2]
+    c.mamba_drop_rate = 0.0
 
-    # deepest stage is bottleneck
-    c.hidden_size = c.mamba_dims[-1]   # 384
+    c.hidden_size = c.mamba_dims[-1]  # 384
 
     c.decoder_channels = tuple(decoder_channels)
     c.n_classes = int(n_classes)
     c.activation = "softmax"
 
-    # 3 skip connections: [H/8, H/4, H/2]
     c.n_skip = int(n_skip)
     if c.n_skip > 0:
-        c.skip_channels = [c.mamba_dims[2],  # 192 at 28×28
-                           c.mamba_dims[1],  # 96 at 56×56
-                           c.mamba_dims[0],  # 48 at 112×112
+        c.skip_channels = [c.mamba_dims[2],  # 192 (28×28)
+                           c.mamba_dims[1],  #  96 (56×56)
+                           c.mamba_dims[0],  #  48 (112×112)
                            0]
     else:
         c.skip_channels = [0, 0, 0, 0]
 
-    # dummy ViT fields so code doesn’t crash
+    # dummy fields to keep ViT code happy
     c.patches = ml_collections.ConfigDict({"size": (4, 4)})
     c.classifier = "seg"
     c.representation_size = None

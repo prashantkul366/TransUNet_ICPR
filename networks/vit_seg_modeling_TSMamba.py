@@ -19,7 +19,7 @@ from scipy import ndimage
 from . import vit_seg_configs as configs
 from .vit_seg_modeling_resnet_skip import ResNetV2
 
-from .segmamba import MambaEncoder
+from .segmamba import MambaEncoder2D 
 
 logger = logging.getLogger(__name__)
 
@@ -255,21 +255,21 @@ class Transformer(nn.Module):
         embedding_output, features = self.embeddings(input_ids)
         encoded, attn_weights = self.encoder(embedding_output)  # (B, n_patch, hidden)
         return encoded, attn_weights, features
+    
 
 class TSMambaAdapter(nn.Module):
     """
-    Drop-in replacement for Transformer(...) that wraps MambaEncoder
-    and exposes (encoded_tokens, attn_weights=None, features) for DecoderCup.
+    Drop-in replacement for Transformer when using a 2D Mamba encoder.
+    Returns (tokens, attn_weights, features) to feed DecoderCup.
     """
     def __init__(self, config, img_size, vis=False):
         super().__init__()
         self.config = config
         self.vis = vis
-        self.hidden_size = config.hidden_size  # 384
-        print("Initializing TSMamba Adapter...")
-        # Re-use your SegMamba.MambaEncoder, but 2D if needed
-        self.backbone = MambaEncoder(
-            in_chans=1,                      # or 3 for RGB
+        self.hidden_size = config.hidden_size  # e.g. 384
+
+        self.backbone = MambaEncoder2D(
+            in_chans=1,  # or 3 if your inputs are RGB
             depths=config.mamba_depths,
             dims=config.mamba_dims,
             drop_path_rate=getattr(config, "mamba_drop_rate", 0.0),
@@ -278,27 +278,28 @@ class TSMambaAdapter(nn.Module):
 
     def forward(self, x):
         # x: (B, C, 224, 224)
-        # MambaEncoder returns 4 feature maps: outs[0..3]
-        outs = self.backbone(x)   # tuple of 4 tensors
+        outs = self.backbone(x)   # (f0, f1, f2, f3)
 
-        f0, f1, f2, f3 = outs     # 112, 56, 28, 14
+        f0, f1, f2, f3 = outs     # shapes:
+                                  # f0: (B, 48, 112, 112)
+                                  # f1: (B, 96, 56, 56)
+                                  # f2: (B,192, 28, 28)
+                                  # f3: (B,384, 14, 14)
 
-        # bottleneck: f3 (B, 384, 14, 14)
+        # bottleneck to tokens: (B, 196, hidden_size)
         B, C, H, W = f3.shape
-        n_patches = H * W  # should be 196 for 14×14
+        tokens = f3.flatten(2).transpose(1, 2)  # (B, H*W, C) = (B, 196, 384)
 
-        # flatten to tokens: (B, n_patches, hidden_size)
-        tokens = f3.flatten(2).transpose(1, 2)  # (B, 196, 384)
-
-        # 3 skip connections for DecoderCup
+        # 3 skip connections: H/8, H/4, H/2
         features = [
-            f2,  # (B, 192, 28, 28)
+            f2,  # (B,192, 28, 28)
             f1,  # (B, 96, 56, 56)
-            f0,  # (B, 48, 112, 112)
+            f0,  # (B, 48,112,112)
         ]
 
-        attn_weights = None  # no attention maps here
+        attn_weights = None
         return tokens, attn_weights, features
+
 
 class Conv2dReLU(nn.Sequential):
     def __init__(
