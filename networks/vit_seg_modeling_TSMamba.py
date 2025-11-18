@@ -266,15 +266,16 @@ class TSMambaAdapter(nn.Module):
         super().__init__()
         self.config = config
         self.vis = vis
-        self.hidden_size = config.hidden_size  # e.g. 384
+        self.hidden_size = config.hidden_size
 
         self.backbone = MambaEncoder2D(
-            in_chans=1,  # or 3 if your inputs are RGB
+            in_chans=3,  
             depths=config.mamba_depths,
             dims=config.mamba_dims,
             drop_path_rate=getattr(config, "mamba_drop_rate", 0.0),
             layer_scale_init_value=1e-6,
         )
+
 
     def forward(self, x):
         # x: (B, C, 224, 224)
