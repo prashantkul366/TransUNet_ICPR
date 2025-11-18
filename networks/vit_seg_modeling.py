@@ -452,6 +452,7 @@ CONFIGS = {
     'MAMBA-VSS': configs.get_mamba_vss_config(),
     'MOBILE-MAMBA': configs.get_mobilemamba_config(),
     'KAT' : configs.get_kat_b16_config(),
+    'TS-MAMBA': configs.get_tsmamba_config(),
 }
 
 

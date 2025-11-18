@@ -14,6 +14,7 @@ from networks.vit_seg_modeling_Mobile_Mamba import VisionTransformer as ViT_seg_
 from networks.vit_seg_modeling_waveKAN import VisionTransformer as ViT_seg_waveKAN
 from networks.vit_seg_modeling_KAT import VisionTransformer as ViT_seg_KAT
 from networks.vit_seg_modeling_KAN_fJNB import VisionTransformer as ViT_seg_KAN_fJNB
+from networks.vit_seg_modeling_TSMamba import VisionTransformer as ViT_seg_TSMamba
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse
@@ -135,7 +136,7 @@ if __name__ == "__main__":
 
     # MobileMamba
     ######################################################################################
-    net = ViT_seg_Mobile_Mamba(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net = ViT_seg_Mobile_Mamba(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
     # net.load_from(config_vit)
     ######################################################################################
 
@@ -154,6 +155,12 @@ if __name__ == "__main__":
     # TRANSFORMER WITH fJNB - KAN 
     ######################################################################################
     # net = ViT_seg_KAN_fJNB(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net.load_from(weights=np.load(config_vit.pretrained_path))
+    ######################################################################################
+
+    # TSMamba Encoder from Segmamba
+    ######################################################################################
+    net = ViT_seg_TSMamba(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
     # net.load_from(weights=np.load(config_vit.pretrained_path))
     ######################################################################################
 
