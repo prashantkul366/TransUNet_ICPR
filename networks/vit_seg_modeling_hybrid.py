@@ -626,7 +626,21 @@ class DecoderBlock(nn.Module):
         print("After upsample:", x.shape)
 
         if skip is not None:
+            if skip.shape[2:] != x.shape[2:]:
+                skip = F.interpolate(
+                    skip,
+                    size=x.shape[2:],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+                print("Resized skip:", skip.shape)
+
             x = torch.cat([x, skip], dim=1)
+
+        # if skip is not None:
+        #     x = torch.cat([x, skip], dim=1)
+
+
         x = self.conv1(x)
         print("After conv1:", x.shape)
         x = self.conv2(x)
