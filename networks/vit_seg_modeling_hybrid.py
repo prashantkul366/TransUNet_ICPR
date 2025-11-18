@@ -171,47 +171,86 @@ class KANMLP(nn.Module):
         return self.kan.regularization_loss(reg_act, reg_ent)
 
 
+# class Embeddings(nn.Module):
+#     """Construct the embeddings from patch, position embeddings.
+#     """
+#     def __init__(self, config, img_size, in_channels=3):
+#         super(Embeddings, self).__init__()
+#         # self.hybrid = None
+#         self.hybrid = False 
+#         self.config = config
+#         img_size = _pair(img_size)
+
+#         if config.patches.get("grid") is not None:   # ResNet
+#             grid_size = config.patches["grid"]
+#             patch_size = (img_size[0] // 16 // grid_size[0], img_size[1] // 16 // grid_size[1])
+#             patch_size_real = (patch_size[0] * 16, patch_size[1] * 16)
+#             n_patches = (img_size[0] // patch_size_real[0]) * (img_size[1] // patch_size_real[1])  
+#             self.hybrid = True
+#         else:
+#             patch_size = _pair(config.patches["size"])
+#             n_patches = (img_size[0] // patch_size[0]) * (img_size[1] // patch_size[1])
+#             self.hybrid = False
+
+#         if self.hybrid:
+#             self.hybrid_model = ResNetV2(block_units=config.resnet.num_layers, width_factor=config.resnet.width_factor)
+#             in_channels = self.hybrid_model.width * 16
+#         self.patch_embeddings = Conv2d(in_channels=in_channels,
+#                                        out_channels=config.hidden_size,
+#                                        kernel_size=patch_size,
+#                                        stride=patch_size)
+#         self.position_embeddings = nn.Parameter(torch.zeros(1, n_patches, config.hidden_size))
+
+#         self.dropout = Dropout(config.transformer["dropout_rate"])
+
+
+#     def forward(self, x):
+
+#         features = None
+#         x = self.patch_embeddings(x)  # (B, hidden. n_patches^(1/2), n_patches^(1/2))
+#         x = x.flatten(2)
+#         x = x.transpose(-1, -2)  # (B, n_patches, hidden)
+
+#         embeddings = x + self.position_embeddings
+#         embeddings = self.dropout(embeddings)
+#         return embeddings, features
+
+
 class Embeddings(nn.Module):
-    """Construct the embeddings from patch, position embeddings.
-    """
+    """Construct the embeddings from patch + position, no ResNet."""
     def __init__(self, config, img_size, in_channels=3):
         super(Embeddings, self).__init__()
-        # self.hybrid = None
-        self.hybrid = False 
+        self.hybrid = False          # <- force pure ViT
         self.config = config
         img_size = _pair(img_size)
 
-        if config.patches.get("grid") is not None:   # ResNet
-            grid_size = config.patches["grid"]
-            patch_size = (img_size[0] // 16 // grid_size[0], img_size[1] // 16 // grid_size[1])
-            patch_size_real = (patch_size[0] * 16, patch_size[1] * 16)
-            n_patches = (img_size[0] // patch_size_real[0]) * (img_size[1] // patch_size_real[1])  
-            self.hybrid = True
-        else:
-            patch_size = _pair(config.patches["size"])
-            n_patches = (img_size[0] // patch_size[0]) * (img_size[1] // patch_size[1])
-            self.hybrid = False
+        # Use standard ViT patch size from config
+        # For TransUNet this is usually 16 -> 224/16 = 14 -> 196 tokens
+        patch_size = _pair(config.patches["size"])
+        n_patches = (img_size[0] // patch_size[0]) * (img_size[1] // patch_size[1])
 
-        if self.hybrid:
-            self.hybrid_model = ResNetV2(block_units=config.resnet.num_layers, width_factor=config.resnet.width_factor)
-            in_channels = self.hybrid_model.width * 16
-        self.patch_embeddings = Conv2d(in_channels=in_channels,
-                                       out_channels=config.hidden_size,
-                                       kernel_size=patch_size,
-                                       stride=patch_size)
-        self.position_embeddings = nn.Parameter(torch.zeros(1, n_patches, config.hidden_size))
+        # Directly embed from image (3 channels) to hidden_size
+        self.patch_embeddings = Conv2d(
+            in_channels=in_channels,         # <-- 3 channels now, not 1024
+            out_channels=config.hidden_size, # e.g. 768
+            kernel_size=patch_size,          # (16, 16)
+            stride=patch_size,               # (16, 16)
+        )
 
+        self.position_embeddings = nn.Parameter(
+            torch.zeros(1, n_patches, config.hidden_size)
+        )
         self.dropout = Dropout(config.transformer["dropout_rate"])
 
-
     def forward(self, x):
+        # x: (B, 3, 224, 224)
+        features = None   # no ResNet features
 
-        features = None
-        x = self.patch_embeddings(x)  # (B, hidden. n_patches^(1/2), n_patches^(1/2))
-        x = x.flatten(2)
-        x = x.transpose(-1, -2)  # (B, n_patches, hidden)
+        x = self.patch_embeddings(x)       # (B, D, 14, 14) if patch_size=16
+        x = x.flatten(2)                   # (B, D, 196)
+        x = x.transpose(-1, -2)            # (B, 196, D)
 
-        embeddings = x + self.position_embeddings
+        embeddings = x + self.position_embeddings  # (B, 196, D)
         embeddings = self.dropout(embeddings)
         return embeddings, features
 
