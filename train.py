@@ -16,7 +16,8 @@ import torch.backends.cudnn as cudnn
 # from networks.vit_seg_modeling_KAN_fJNB import VisionTransformer as ViT_seg_KAN_fJNB
 # from networks.vit_seg_modeling_TSMamba import VisionTransformer as ViT_seg_TSMamba
 # from networks.vit_seg_modeling_hybrid import VisionTransformer as ViT_seg_Hybrid
-from networks.vit_seg_modeling_hybrid_down import VisionTransformer as ViT_seg_Hybrid
+# from networks.vit_seg_modeling_hybrid_down import VisionTransformer as ViT_seg_Hybrid
+from networks.vit_seg_modeling_hybrid_down2 import VisionTransformer as ViT_seg_Hybrid2
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse
@@ -168,7 +169,13 @@ if __name__ == "__main__":
 
     # TransfMamba Hybrid Encoder
     ######################################################################################
-    net = ViT_seg_Hybrid(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net = ViT_seg_Hybrid(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net.load_from(weights=np.load(config_vit.pretrained_path))
+    ######################################################################################
+
+    # TransfMamba Hybrid Encoder
+    ######################################################################################
+    net = ViT_seg_Hybrid2(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
     # net.load_from(weights=np.load(config_vit.pretrained_path))
     ######################################################################################
 
