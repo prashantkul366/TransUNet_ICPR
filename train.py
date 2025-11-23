@@ -15,7 +15,8 @@ import torch.backends.cudnn as cudnn
 # from networks.vit_seg_modeling_KAT import VisionTransformer as ViT_seg_KAT
 # from networks.vit_seg_modeling_KAN_fJNB import VisionTransformer as ViT_seg_KAN_fJNB
 # from networks.vit_seg_modeling_TSMamba import VisionTransformer as ViT_seg_TSMamba
-from networks.vit_seg_modeling_hybrid import VisionTransformer as ViT_seg_Hybrid
+# from networks.vit_seg_modeling_hybrid import VisionTransformer as ViT_seg_Hybrid
+from networks.vit_seg_modeling_hybrid_down import VisionTransformer as ViT_seg_Hybrid
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse

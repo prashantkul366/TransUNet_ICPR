@@ -54,9 +54,10 @@ def get_r50_b16_config():
     # config.decoder_channels = (256, 128, 64, 16)
     config.decoder_channels = (512, 256, 128, 64)
     # config.skip_channels = [512, 256, 64, 16]
-    config.skip_channels = [768, 768, 768, 768]
+    # config.skip_channels = [768, 768, 768, 768]
+    config.skip_channels = [64, 128, 256, config.hidden_size]
     config.n_classes = 2
-    config.n_skip = 3
+    config.n_skip = 4
     config.activation = 'softmax'
 
     config.use_kan_ffn = True
