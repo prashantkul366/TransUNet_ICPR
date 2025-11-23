@@ -305,26 +305,26 @@ class Embeddings(nn.Module):
 
     def forward(self, x):
         # Conv stem
-        print("\n[Embeddings] Input image:", x.shape)
+        # print("\n[Embeddings] Input image:", x.shape)
         # f1 = self.stem1(x)  # [B, 64, 112, 112]
         # f2 = self.stem2(f1) # [B, 128, 56, 56]
         # f3 = self.stem3(f2) # [B, 256, 28, 28]
         # f4 = self.stem4(f3) # [B, 768, 14, 14] if hidden_size=768
 
         f1 = self.stem1(x)  # [B, 64, 112, 112]
-        print("[Embeddings] f1 (112x112):", f1.shape)
+        # print("[Embeddings] f1 (112x112):", f1.shape)
         f2 = self.stem2(f1) # [B, 128, 56, 56]
-        print("[Embeddings] f2 (56x56):", f2.shape)
+        # print("[Embeddings] f2 (56x56):", f2.shape)
         f3 = self.stem3(f2) # [B, 256, 28, 28]
-        print("[Embeddings] f3 (28x28):", f3.shape)
+        # print("[Embeddings] f3 (28x28):", f3.shape)
         f4 = self.stem4(f3) # [B, hidden, 14, 14]
-        print("[Embeddings] f4 (14x14):", f4.shape)
+        # print("[Embeddings] f4 (14x14):", f4.shape)
 
         # Use f4 for tokens
         x = self.patch_embeddings(f4)   # still [B, 768, 14, 14]
-        print("[Embeddings] After patch_embeddings:", x.shape)
+        # print("[Embeddings] After patch_embeddings:", x.shape)
         x = x.flatten(2).transpose(1, 2)  # [B, 196, 768]
-        print("[Embeddings] Tokens:", x.shape)
+        # print("[Embeddings] Tokens:", x.shape)
 
         embeddings = x + self.position_embeddings
         embeddings = self.dropout(embeddings)
@@ -606,19 +606,19 @@ class Transformer(nn.Module):
         self.encoder_norm = LayerNorm(config.hidden_size, eps=1e-6)
 
     def forward(self, input_ids):
-        print("\n[Transformer] input_ids:", input_ids.shape)
+        # print("\n[Transformer] input_ids:", input_ids.shape)
         embedding_output, conv_features = self.embeddings(input_ids)   # conv_features: [f1,f2,f3,f4]
 
-        print("[Transformer] embedding_output (tokens):", embedding_output.shape)
-        for i, f in enumerate(conv_features):
-            print(f"[Transformer] conv_features[{i}] shape:", f.shape)
+        # print("[Transformer] embedding_output (tokens):", embedding_output.shape)
+        # for i, f in enumerate(conv_features):
+        #     print(f"[Transformer] conv_features[{i}] shape:", f.shape)
 
         x = embedding_output
         all_attn_weights = []
         B, N, D = x.shape
         H = W = int(math.sqrt(N))
 
-        print("[Transformer] B,N,D,H,W:", B, N, D, H, W)
+        # print("[Transformer] B,N,D,H,W:", B, N, D, H, W)
 
         # still run through T+M stages at 14×14
         # for stage in self.stages:
@@ -628,14 +628,14 @@ class Transformer(nn.Module):
 
         for s, stage in enumerate(self.stages):
             t_block, m_block = stage
-            print(f"[Transformer] Stage {s} - before T_Block:", x.shape)
+            # print(f"[Transformer] Stage {s} - before T_Block:", x.shape)
             x, _ = t_block(x)
-            print(f"[Transformer] Stage {s} - after T_Block:", x.shape)
+            # print(f"[Transformer] Stage {s} - after T_Block:", x.shape)
             x, _ = m_block(x)
-            print(f"[Transformer] Stage {s} - after M_Block:", x.shape)
+            # print(f"[Transformer] Stage {s} - after M_Block:", x.shape)
 
         x = self.encoder_norm(x)
-        print("[Transformer] Encoded tokens after norm:", x.shape)
+        # print("[Transformer] Encoded tokens after norm:", x.shape)
 
         # We will use conv_features as skip connections, not the per-stage token maps
         # but you *can* also append the final 14×14 tokens as the deepest skip:
@@ -646,8 +646,8 @@ class Transformer(nn.Module):
             conv_features[3],  # 14×14 (or from tokens)
         ]
 
-        for i, f in enumerate(skip_features):
-            print(f"[Transformer] skip_features[{i}] shape:", f.shape)
+        # for i, f in enumerate(skip_features):
+        #     print(f"[Transformer] skip_features[{i}] shape:", f.shape)
 
 
         return x, all_attn_weights, skip_features
@@ -745,9 +745,9 @@ class DecoderBlock(nn.Module):
 
     def forward(self, x, skip=None):
 
-        print("\nDecoderBlock - input x:", x.shape)
+        # print("\nDecoderBlock - input x:", x.shape)
         x = self.up(x)
-        print("After upsample:", x.shape)
+        # print("After upsample:", x.shape)
 
         if skip is not None:
             if skip.shape[2:] != x.shape[2:]:
@@ -757,7 +757,7 @@ class DecoderBlock(nn.Module):
                     mode="bilinear",
                     align_corners=False,
                 )
-                print("Resized skip:", skip.shape)
+                # print("Resized skip:", skip.shape)
 
             x = torch.cat([x, skip], dim=1)
 
@@ -766,9 +766,9 @@ class DecoderBlock(nn.Module):
 
 
         x = self.conv1(x)
-        print("After conv1:", x.shape)
+        # print("After conv1:", x.shape)
         x = self.conv2(x)
-        print("After conv2:", x.shape)
+        # print("After conv2:", x.shape)
         return x
 
 
@@ -813,27 +813,27 @@ class DecoderCup(nn.Module):
         B, n_patch, hidden = hidden_states.size()  # reshape from (B, n_patch, hidden) to (B, h, w, hidden)
         h, w = int(np.sqrt(n_patch)), int(np.sqrt(n_patch))
 
-        print("\n[DecoderCup] hidden_states:", hidden_states.shape)
+        # print("\n[DecoderCup] hidden_states:", hidden_states.shape)
         x = hidden_states.permute(0, 2, 1)
         x = x.contiguous().view(B, hidden, h, w)
-        print("[DecoderCup] reshaped to feature map:", x.shape)
+        # print("[DecoderCup] reshaped to feature map:", x.shape)
         x = self.conv_more(x)
-        print("[DecoderCup] after conv_more:", x.shape)
+        # print("[DecoderCup] after conv_more:", x.shape)
 
         for i, decoder_block in enumerate(self.blocks):
-            print(f"\n[DecoderCup] -- Decoder block {i} --")
+            # print(f"\n[DecoderCup] -- Decoder block {i} --")
             if features is not None:
                 skip = features[i] if (i < self.config.n_skip) else None
             else:
                 skip = None
 
-            if skip is not None:
-                print(f"[DecoderCup] skip[{i}] before resize:", skip.shape)
-            else:
-                print(f"[DecoderCup] skip[{i}] is None")  
+            # if skip is not None:
+            #     print(f"[DecoderCup] skip[{i}] before resize:", skip.shape)
+            # else:
+            #     print(f"[DecoderCup] skip[{i}] is None")  
 
             x = decoder_block(x, skip=skip)
-            print("[DecoderCup] Output of decoder_block:", x.shape)
+            # print("[DecoderCup] Output of decoder_block:", x.shape)
 
         return x
 
@@ -861,26 +861,26 @@ class VisionTransformer(nn.Module):
         print("Proposed Hybrid Model Created")
 
     def forward(self, x):
-        print("\n=== VisionTransformer.forward ===")
+        # print("\n=== VisionTransformer.forward ===")
         # print("Input to ViT (before channel repeat):", x.shape)
 
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)
         
-        print("Input to transformer (after repeat if any):", x.shape)
+        # print("Input to transformer (after repeat if any):", x.shape)
         x, attn_weights, features = self.transformer(x)  # (B, n_patch, hidden)
         
-        print("Output tokens from transformer:", x.shape)
-        print("Num skip features from transformer:", len(features))
+        # print("Output tokens from transformer:", x.shape)
+        # print("Num skip features from transformer:", len(features))
 
-        for i, f in enumerate(features):
-            print(f"  Skip {i} shape:", f.shape)
+        # for i, f in enumerate(features):
+        #     print(f"  Skip {i} shape:", f.shape)
 
         x = self.decoder(x, features)
-        print("Decoder output feature map:", x.shape)
+        # print("Decoder output feature map:", x.shape)
 
         logits = self.segmentation_head(x)
-        print("Final logits:", logits.shape)
+        # print("Final logits:", logits.shape)
         return logits
 
    
