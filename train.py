@@ -17,7 +17,8 @@ import torch.backends.cudnn as cudnn
 # from networks.vit_seg_modeling_TSMamba import VisionTransformer as ViT_seg_TSMamba
 # from networks.vit_seg_modeling_hybrid import VisionTransformer as ViT_seg_Hybrid
 # from networks.vit_seg_modeling_hybrid_down import VisionTransformer as ViT_seg_Hybrid
-from networks.vit_seg_modeling_hybrid_down2 import VisionTransformer as ViT_seg_Hybrid2
+# from networks.vit_seg_modeling_hybrid_down2 import VisionTransformer as ViT_seg_Hybrid2
+from networks.proposed_hybrid import SegMamba
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse
@@ -52,6 +53,10 @@ parser.add_argument('--vit_name', type=str,
                     default='R50-ViT-B_16', help='select one vit model')
 parser.add_argument('--vit_patches_size', type=int,
                     default=16, help='vit_patches_size, default is 16')
+parser.add_argument('--output_dir', type=str,
+                    default='./runs',
+                    help='where to save models, logs, tensorboard etc.')
+
 args = parser.parse_args()
 
 
@@ -92,21 +97,46 @@ if __name__ == "__main__":
     args.root_path = dataset_config[dataset_name]['root_path']
     args.list_dir = dataset_config[dataset_name]['list_dir']
     args.is_pretrain = True
-    args.exp = 'TU_' + dataset_name + str(args.img_size)
-    snapshot_path = "../model/{}/{}".format(args.exp, 'TU')
-    snapshot_path = snapshot_path + '_pretrain' if args.is_pretrain else snapshot_path
-    snapshot_path += '_' + args.vit_name
-    snapshot_path = snapshot_path + '_skip' + str(args.n_skip)
-    snapshot_path = snapshot_path + '_vitpatch' + str(args.vit_patches_size) if args.vit_patches_size!=16 else snapshot_path
-    snapshot_path = snapshot_path+'_'+str(args.max_iterations)[0:2]+'k' if args.max_iterations != 30000 else snapshot_path
-    snapshot_path = snapshot_path + '_epo' +str(args.max_epochs) if args.max_epochs != 30 else snapshot_path
-    snapshot_path = snapshot_path+'_bs'+str(args.batch_size)
-    snapshot_path = snapshot_path + '_lr' + str(args.base_lr) if args.base_lr != 0.01 else snapshot_path
-    snapshot_path = snapshot_path + '_'+str(args.img_size)
-    snapshot_path = snapshot_path + '_s'+str(args.seed) if args.seed!=1234 else snapshot_path
 
+    # args.exp = 'TU_' + dataset_name + str(args.img_size)
+    # snapshot_path = "../model/{}/{}".format(args.exp, 'TU')
+    # snapshot_path = snapshot_path + '_pretrain' if args.is_pretrain else snapshot_path
+    # snapshot_path += '_' + args.vit_name
+    # snapshot_path = snapshot_path + '_skip' + str(args.n_skip)
+    # snapshot_path = snapshot_path + '_vitpatch' + str(args.vit_patches_size) if args.vit_patches_size!=16 else snapshot_path
+    # snapshot_path = snapshot_path+'_'+str(args.max_iterations)[0:2]+'k' if args.max_iterations != 30000 else snapshot_path
+    # snapshot_path = snapshot_path + '_epo' +str(args.max_epochs) if args.max_epochs != 30 else snapshot_path
+    # snapshot_path = snapshot_path+'_bs'+str(args.batch_size)
+    # snapshot_path = snapshot_path + '_lr' + str(args.base_lr) if args.base_lr != 0.01 else snapshot_path
+    # snapshot_path = snapshot_path + '_'+str(args.img_size)
+    # snapshot_path = snapshot_path + '_s'+str(args.seed) if args.seed!=1234 else snapshot_path
+
+    # if not os.path.exists(snapshot_path):
+    #     os.makedirs(snapshot_path)
+
+    dataset_name = args.dataset
+    encoder_tag = "Hybrid2"
+
+    exp_parts = [
+        "TU",
+        args.dataset,
+        encoder_tag,
+        args.vit_name.replace("-", "").replace("_", ""),
+        f"img{args.img_size}",
+        f"bs{args.batch_size}",
+        f"s{args.seed}",
+    ]
+    args.exp = "_".join(exp_parts)
+
+    # Base output directory (inside repo by default)
+    base_out_dir = args.output_dir  # e.g. ./runs
+
+    # Final snapshot path
+    snapshot_path = os.path.join(base_out_dir, args.exp)
     if not os.path.exists(snapshot_path):
-        os.makedirs(snapshot_path)
+        os.makedirs(snapshot_path, exist_ok=True)
+
+    print("==> Saving everything to:", snapshot_path)
 
     config_vit = CONFIGS_ViT_seg[args.vit_name]
     config_vit.n_classes = args.num_classes
@@ -175,10 +205,18 @@ if __name__ == "__main__":
 
     # TransfMamba Hybrid Encoder
     ######################################################################################
-    net = ViT_seg_Hybrid2(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net = ViT_seg_Hybrid2(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
     # net.load_from(weights=np.load(config_vit.pretrained_path))
     ######################################################################################
 
+    # Segmamba
+    ######################################################################################
+    net = SegMamba(in_chans=3,
+                        out_chans=args.num_classes,
+                        depths=[2,2,2,2],
+                        feat_size=[48, 96, 192, 384]).cuda()
+    ######################################################################################
+    
     # trainer = {'Synapse': trainer_synapse,}
     trainer = {'BUSI': trainer_synapse,}
     trainer[dataset_name](args, net, snapshot_path)
