@@ -53,14 +53,14 @@ def eval_val_dice(model, loader, num_classes, device="cuda"):
         logits = model(imgs)                     # [B,C,H,W]
         preds = torch.argmax(F.softmax(logits, dim=1), dim=1)  # [B,H,W]
         
-        if not printed_val_shapes:
-            print("\n[VAL] ==== Shape debug (first val batch) ====")
-            print(f"[VAL] imgs:   {imgs.shape}")      # [B, 3, H, W]
-            print(f"[VAL] gts:    {gts.shape}")       # [B, H, W]
-            print(f"[VAL] logits: {logits.shape}")    # [B, C, H, W]
-            print(f"[VAL] preds:  {preds.shape}")     # [B, H, W]
-            printed_val_shapes = True
-            
+        # if not printed_val_shapes:
+        #     print("\n[VAL] ==== Shape debug (first val batch) ====")
+        #     print(f"[VAL] imgs:   {imgs.shape}")      # [B, 3, H, W]
+        #     print(f"[VAL] gts:    {gts.shape}")       # [B, H, W]
+        #     print(f"[VAL] logits: {logits.shape}")    # [B, C, H, W]
+        #     print(f"[VAL] preds:  {preds.shape}")     # [B, H, W]
+        #     printed_val_shapes = True
+
         if num_classes == 2:
             # foreground (class=1) Dice
             p = (preds == 1).float()
