@@ -408,9 +408,12 @@ class SegMamba(nn.Module):
         logits = self.out(out)
         if debug:
             print(f"[SegMamba] logits (final): {logits.shape}")
+
+        logits = logits.squeeze(2)  # [B, C, H, W]
+        if debug:
+            print(f"[SegMamba] logits after squeezze (final): {logits.shape}")
             print("[SegMamba] ===== End shapes =====\n")
             self._printed_shapes = True
 
-        logits = logits.squeeze(2)  # [B, C, H, W]
         return logits
     
