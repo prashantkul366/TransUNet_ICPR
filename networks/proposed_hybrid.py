@@ -326,6 +326,7 @@ class SegMamba(nn.Module):
     def forward(self, x_in):
         debug = not self._printed_shapes
 
+        x_in = x_in.unsqueeze(2)            # [B, 3, 1, H, W]
         if debug:
             print("\n[SegMamba] ===== Forward pass shapes =====")
             print(f"[SegMamba] x_in: {x_in.shape}")
