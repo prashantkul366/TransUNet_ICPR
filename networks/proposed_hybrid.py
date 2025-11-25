@@ -328,9 +328,9 @@ class SegMamba(nn.Module):
 
         # x_in = x_in.unsqueeze(2)            # [B, 3, 1, H, W]
         if x_in.dim() == 4:
-            x = x_in.unsqueeze(2)   # -> [B, 3, 1, H, W]
+            x_in = x_in.unsqueeze(2)   # -> [B, 3, 1, H, W]
         else:
-            x = x_in  # already 5D
+            x_in = x_in  # already 5D
         if debug:
             print("\n[SegMamba] ===== Forward pass shapes =====")
             print(f"[SegMamba] x_in: {x_in.shape}")
