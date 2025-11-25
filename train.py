@@ -115,7 +115,7 @@ if __name__ == "__main__":
     #     os.makedirs(snapshot_path)
 
     dataset_name = args.dataset
-    encoder_tag = "Hybrid2"
+    encoder_tag = "Segmamba"
 
     exp_parts = [
         "TU",

@@ -45,12 +45,22 @@ def build_dataset(args, split):
 def eval_val_dice(model, loader, num_classes, device="cuda"):
     model.eval()
     dices = []
+    printed_val_shapes = False
+
     for batch in loader:
         imgs = batch['image'].to(device)
         gts  = batch['label'].to(device).long()  # [B,H,W]
         logits = model(imgs)                     # [B,C,H,W]
         preds = torch.argmax(F.softmax(logits, dim=1), dim=1)  # [B,H,W]
-
+        
+        if not printed_val_shapes:
+            print("\n[VAL] ==== Shape debug (first val batch) ====")
+            print(f"[VAL] imgs:   {imgs.shape}")      # [B, 3, H, W]
+            print(f"[VAL] gts:    {gts.shape}")       # [B, H, W]
+            print(f"[VAL] logits: {logits.shape}")    # [B, C, H, W]
+            print(f"[VAL] preds:  {preds.shape}")     # [B, H, W]
+            printed_val_shapes = True
+            
         if num_classes == 2:
             # foreground (class=1) Dice
             p = (preds == 1).float()
@@ -76,6 +86,7 @@ def eval_val_dice(model, loader, num_classes, device="cuda"):
     if len(dices) == 0:
         return 0.0
     return torch.stack(dices).mean().item()
+
 
 def trainer_synapse(args, model, snapshot_path):
     # ---- folder structure inside snapshot_path ----
@@ -142,7 +153,7 @@ def trainer_synapse(args, model, snapshot_path):
     max_epoch = args.max_epochs
     max_iterations = args.max_epochs * len(trainloader)
     logging.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
-
+    printed_train_shapes = False
     # --- early stopping state ---
     PATIENCE = 100
     best_val_dice = -1.0
@@ -160,6 +171,14 @@ def trainer_synapse(args, model, snapshot_path):
             image_batch, label_batch = sampled_batch['image'], sampled_batch['label']
             image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
             outputs = model(image_batch)
+
+            if not printed_train_shapes:
+                print("\n[TRAIN] ==== Shape debug (first batch) ====")
+                print(f"[TRAIN] image_batch: {image_batch.shape}")     # e.g. [B, 3, H, W]
+                print(f"[TRAIN] label_batch: {label_batch.shape}")     # e.g. [B, H, W]
+                print(f"[TRAIN] outputs (logits): {outputs.shape}")    # e.g. [B, num_classes, H, W]
+                printed_train_shapes = True
+
             loss_ce = ce_loss(outputs, label_batch.long())
             loss_dice = dice_loss(outputs, label_batch, softmax=True)
             loss = 0.5 * loss_ce + 0.5 * loss_dice
