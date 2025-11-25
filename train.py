@@ -18,7 +18,7 @@ import torch.backends.cudnn as cudnn
 # from networks.vit_seg_modeling_hybrid import VisionTransformer as ViT_seg_Hybrid
 # from networks.vit_seg_modeling_hybrid_down import VisionTransformer as ViT_seg_Hybrid
 # from networks.vit_seg_modeling_hybrid_down2 import VisionTransformer as ViT_seg_Hybrid2
-# from networks.proposed_hybrid import SegMamba
+from networks.proposed_hybrid import SegMamba
 from networks.unetr import UNETR
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
@@ -212,13 +212,13 @@ if __name__ == "__main__":
 
     # Segmamba
     ######################################################################################
-    # net = SegMamba(in_chans=3,
-    #                     out_chans=args.num_classes,
-    #                     depths=[2,2,2,2],
-    #                     feat_size=[48, 96, 192, 384]).cuda()
+    net = SegMamba(in_chans=3,
+                        out_chans=args.num_classes,
+                        depths=[2,2,2,2],
+                        feat_size=[48, 96, 192, 384]).cuda()
     ######################################################################################
     
-    net = UNETR(in_channels=3, out_channels=2, img_size=(224,224))
+    # net = UNETR(in_channels=3, out_channels=2, img_size=(224,224))
     ######################################################################################
     # trainer = {'Synapse': trainer_synapse,}
     trainer = {'BUSI': trainer_synapse,}
