@@ -135,15 +135,33 @@ class MambaEncoder(nn.Module):
         super().__init__()
 
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
+        # stem = nn.Sequential(
+        #       nn.Conv3d(in_chans, dims[0], kernel_size=7, stride=2, padding=3),
+        #       )
         stem = nn.Sequential(
-              nn.Conv3d(in_chans, dims[0], kernel_size=7, stride=2, padding=3),
-              )
+            nn.Conv3d(
+                in_chans,
+                dims[0],
+                kernel_size=(1, 7, 7),
+                stride=(1, 2, 2),
+                padding=(0, 3, 3),
+            ),
+        )
         self.downsample_layers.append(stem)
         for i in range(3):
+            # downsample_layer = nn.Sequential(
+            #     # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
+            #     nn.InstanceNorm3d(dims[i]),
+            #     nn.Conv3d(dims[i], dims[i+1], kernel_size=2, stride=2),
+            # )
             downsample_layer = nn.Sequential(
-                # LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
                 nn.InstanceNorm3d(dims[i]),
-                nn.Conv3d(dims[i], dims[i+1], kernel_size=2, stride=2),
+                nn.Conv3d(
+                    dims[i],
+                    dims[i + 1],
+                    kernel_size=(1, 2, 2),
+                    stride=(1, 2, 2),
+                ),
             )
             self.downsample_layers.append(downsample_layer)
 
@@ -274,7 +292,8 @@ class SegMamba(nn.Module):
             in_channels=self.hidden_size,
             out_channels=self.feat_size[3],
             kernel_size=3,
-            upsample_kernel_size=2,
+            # upsample_kernel_size=2,
+            upsample_kernel_size=(1,2,2),
             norm_name=norm_name,
             res_block=res_block,
         )
@@ -283,7 +302,8 @@ class SegMamba(nn.Module):
             in_channels=self.feat_size[3],
             out_channels=self.feat_size[2],
             kernel_size=3,
-            upsample_kernel_size=2,
+            # upsample_kernel_size=2,
+            upsample_kernel_size=(1,2,2),
             norm_name=norm_name,
             res_block=res_block,
         )
@@ -292,7 +312,8 @@ class SegMamba(nn.Module):
             in_channels=self.feat_size[2],
             out_channels=self.feat_size[1],
             kernel_size=3,
-            upsample_kernel_size=2,
+            # upsample_kernel_size=2,
+            upsample_kernel_size=(1,2,2),
             norm_name=norm_name,
             res_block=res_block,
         )
@@ -301,7 +322,8 @@ class SegMamba(nn.Module):
             in_channels=self.feat_size[1],
             out_channels=self.feat_size[0],
             kernel_size=3,
-            upsample_kernel_size=2,
+            # upsample_kernel_size=2,
+            upsample_kernel_size=(1,2,2),
             norm_name=norm_name,
             res_block=res_block,
         )
