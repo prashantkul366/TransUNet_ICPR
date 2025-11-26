@@ -212,13 +212,18 @@ if __name__ == "__main__":
 
     # Segmamba
     ######################################################################################
-    net = SegMamba(in_chans=3,
-                        out_chans=args.num_classes,
-                        depths=[2,2,2,2],
-                        feat_size=[48, 96, 192, 384]).cuda()
+    # net = SegMamba(in_chans=3,
+    #                     out_chans=args.num_classes,
+    #                     depths=[2,2,2,2],
+    #                     feat_size=[48, 96, 192, 384]).cuda()
     ######################################################################################
     
-    # net = UNETR(in_channels=3, out_channels=2, img_size=(224,224))
+    net = UNETR(
+        in_channels=3,
+        out_channels=args.num_classes,
+        img_size=args.img_size,
+        spatial_dims=2,
+    ).cuda()
     ######################################################################################
     # trainer = {'Synapse': trainer_synapse,}
     trainer = {'BUSI': trainer_synapse,}
