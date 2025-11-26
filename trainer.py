@@ -49,7 +49,7 @@ def eval_val_dice(model, loader, num_classes, device="cuda"):
 
 
     for batch in loader:
-        print("[VAL] running validation...")
+        # print("[VAL] running validation...")
         imgs = batch['image'].to(device)
         gts  = batch['label'].to(device).long()  # [B,H,W]
         logits = model(imgs)                     # [B,C,H,W]
@@ -206,6 +206,8 @@ def trainer_synapse(args, model, snapshot_path):
             if iter_num % 20 == 0:
                 logging.info('iter %d : loss %.6f | ce %.6f | dice %.6f' %
                          (iter_num, loss.item(), loss_ce.item(), loss_dice.item()))
+                print('iter %d : loss %.6f | ce %.6f | dice %.6f' %
+                      (iter_num, loss.item(), loss_ce.item(), loss_dice.item()))
 
             if iter_num % 20 == 0:
                 # pick a valid index even if batch size == 1
@@ -244,9 +246,11 @@ def trainer_synapse(args, model, snapshot_path):
             epochs_no_improve = 0
             torch.save(model.state_dict(), best_ckpt_path)
             logging.info(f" New best Dice {best_val_dice:.4f} at epoch {epoch_num}. Saved {best_ckpt_path}")
+            print(f" New best Dice {best_val_dice:.4f} at epoch {epoch_num}. Saved {best_ckpt_path}")
         else:
             epochs_no_improve += 1
             logging.info(f"No improvement for {epochs_no_improve} epoch(s). Best {best_val_dice:.4f} @ epoch {best_epoch}")
+            print(f"No improvement for {epochs_no_improve} epoch(s). Best {best_val_dice:.4f} @ epoch {best_epoch}")
 
         # periodic save (optional)
         save_interval = 50
@@ -255,10 +259,12 @@ def trainer_synapse(args, model, snapshot_path):
             save_mode_path = os.path.join(ckpt_dir, f'epoch_{epoch_num}.pth')
             torch.save(model.state_dict(), save_mode_path)
             logging.info(f"Checkpoint saved to {save_mode_path}")
+            print(f"Checkpoint saved to {save_mode_path}")
 
         # trigger early stop
         if epochs_no_improve >= PATIENCE:
             logging.info(f"Early stopping triggered after {PATIENCE} epochs without improvement.")
+            print(f"Early stopping triggered after {PATIENCE} epochs without improvement.")
             break
 
         # last epoch save (in case we never improved)
@@ -267,9 +273,11 @@ def trainer_synapse(args, model, snapshot_path):
             last_path = os.path.join(ckpt_dir, f'epoch_{epoch_num}.pth')
             torch.save(model.state_dict(), last_path)
             logging.info(f"Training finished. Last checkpoint saved to {last_path}")
+            print(f"Training finished. Last checkpoint saved to {last_path}")
             iterator.close()
             break
 
     writer.close()
     logging.info(f"Best val Dice: {best_val_dice:.4f} at epoch {best_epoch}")
+    print(f"Best val Dice: {best_val_dice:.4f} at epoch {best_epoch}")
     return "Training Finished!"
