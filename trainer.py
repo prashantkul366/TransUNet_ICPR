@@ -48,6 +48,7 @@ def eval_val_dice(model, loader, num_classes, device="cuda"):
     printed_val_shapes = False
 
     for batch in loader:
+        print("[VAL] running validation...")
         imgs = batch['image'].to(device)
         gts  = batch['label'].to(device).long()  # [B,H,W]
         logits = model(imgs)                     # [B,C,H,W]
@@ -163,7 +164,9 @@ def trainer_synapse(args, model, snapshot_path):
     best_ckpt_path = os.path.join(ckpt_dir, 'best_model.pth')
 
 
-    iterator = tqdm(range(max_epoch), ncols=70)
+    # iterator = tqdm(range(max_epoch), ncols=70)
+    iterator = range(max_epoch)
+
     for epoch_num in iterator:
         # -------- train one epoch --------
         epoch_loss = 0.0
@@ -230,7 +233,8 @@ def trainer_synapse(args, model, snapshot_path):
         val_dice = eval_val_dice(model, valloader, num_classes, device="cuda")
         writer.add_scalar('val/dice', val_dice, epoch_num)
         logging.info(f"Epoch {epoch_num} | train_loss {epoch_loss/len(trainloader):.6f} | val_dice {val_dice:.4f}")
-
+        print(f"[EPOCH {epoch_num}] val_dice = {val_dice:.4f}")
+        print(f"[Best dice so far] {best_val_dice:.4f} at epoch {best_epoch}")
         # --- save best & early stop ---
         improved = val_dice > best_val_dice + 1e-6
         if improved:
