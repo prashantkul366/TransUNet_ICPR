@@ -92,6 +92,7 @@ class UNETR(nn.Module):
             raise ValueError("hidden_size should be divisible by num_heads.")
 
         self.num_layers = 12
+        self.debug_printed = False
         img_size = ensure_tuple_rep(img_size, spatial_dims)
         self.patch_size = ensure_tuple_rep(16, spatial_dims)
         self.feat_size = tuple(img_d // p_d for img_d, p_d in zip(img_size, self.patch_size))
@@ -204,18 +205,58 @@ class UNETR(nn.Module):
         return x
 
     def forward(self, x_in):
-        print("[UNETR] x_in shape:", x_in.shape)
+        if not self.debug_printed:
+            print("\n==== [UNETR SHAPE DEBUG] ====")
+            print("[UNETR] x_in:", x_in.shape)
+
         x, hidden_states_out = self.vit(x_in)
+        if not self.debug_printed:
+            print("vit x:", x.shape)
+            print("hidden 3:", hidden_states_out[3].shape)
+            print("hidden 6:", hidden_states_out[6].shape)
+            print("hidden 9:", hidden_states_out[9].shape)
+
         enc1 = self.encoder1(x_in)
+        if not self.debug_printed:
+            print("enc1:", enc1.shape)
+
         x2 = hidden_states_out[3]
         enc2 = self.encoder2(self.proj_feat(x2))
+        if not self.debug_printed:
+            print("enc2:", enc2.shape)
+
         x3 = hidden_states_out[6]
         enc3 = self.encoder3(self.proj_feat(x3))
+        if not self.debug_printed:
+            print("enc3:", enc3.shape)
+
         x4 = hidden_states_out[9]
         enc4 = self.encoder4(self.proj_feat(x4))
+        if not self.debug_printed:
+            print("enc4:", enc4.shape)
+
         dec4 = self.proj_feat(x)
+        if not self.debug_printed:
+            print("dec4:", dec4.shape)
+
         dec3 = self.decoder5(dec4, enc4)
+        if not self.debug_printed:
+            print("dec3:", dec3.shape)
+
         dec2 = self.decoder4(dec3, enc3)
+        if not self.debug_printed:
+            print("dec2:", dec2.shape)
+
         dec1 = self.decoder3(dec2, enc2)
+        if not self.debug_printed:
+            print("dec1:", dec1.shape)
+
         out = self.decoder2(dec1, enc1)
+        if not self.debug_printed:
+            print("out before final:", out.shape)
+            print("=============================\n")
+            self.debug_printed = True  # don't print again
+
+            # Stop after first run
+            raise SystemExit("Stopped after first forward debug.")
         return self.out(out)
