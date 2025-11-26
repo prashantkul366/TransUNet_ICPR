@@ -18,7 +18,7 @@ import torch.backends.cudnn as cudnn
 # from networks.vit_seg_modeling_hybrid import VisionTransformer as ViT_seg_Hybrid
 # from networks.vit_seg_modeling_hybrid_down import VisionTransformer as ViT_seg_Hybrid
 # from networks.vit_seg_modeling_hybrid_down2 import VisionTransformer as ViT_seg_Hybrid2
-from networks.proposed_hybrid import SegMamba
+# from networks.proposed_hybrid import SegMamba
 from networks.unetr import UNETR
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
