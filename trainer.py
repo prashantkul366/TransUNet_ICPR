@@ -45,7 +45,8 @@ def build_dataset(args, split):
 def eval_val_dice(model, loader, num_classes, device="cuda"):
     model.eval()
     dices = []
-    printed_val_shapes = False
+    # printed_val_shapes = False
+
 
     for batch in loader:
         print("[VAL] running validation...")
@@ -154,7 +155,7 @@ def trainer_synapse(args, model, snapshot_path):
     max_epoch = args.max_epochs
     max_iterations = args.max_epochs * len(trainloader)
     logging.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
-    printed_train_shapes = False
+    # printed_train_shapes = False
     # --- early stopping state ---
     PATIENCE = 100
     best_val_dice = -1.0
@@ -175,12 +176,12 @@ def trainer_synapse(args, model, snapshot_path):
             image_batch, label_batch = image_batch.cuda(), label_batch.cuda()
             outputs = model(image_batch)
 
-            if not printed_train_shapes:
-                print("\n[TRAIN] ==== Shape debug (first batch) ====")
-                print(f"[TRAIN] image_batch: {image_batch.shape}")     # e.g. [B, 3, H, W]
-                print(f"[TRAIN] label_batch: {label_batch.shape}")     # e.g. [B, H, W]
-                print(f"[TRAIN] outputs (logits): {outputs.shape}")    # e.g. [B, num_classes, H, W]
-                printed_train_shapes = True
+            # if not printed_train_shapes:
+            #     print("\n[TRAIN] ==== Shape debug (first batch) ====")
+            #     print(f"[TRAIN] image_batch: {image_batch.shape}")     # e.g. [B, 3, H, W]
+            #     print(f"[TRAIN] label_batch: {label_batch.shape}")     # e.g. [B, H, W]
+            #     print(f"[TRAIN] outputs (logits): {outputs.shape}")    # e.g. [B, num_classes, H, W]
+            #     printed_train_shapes = True
 
             loss_ce = ce_loss(outputs, label_batch.long())
             loss_dice = dice_loss(outputs, label_batch, softmax=True)
@@ -217,16 +218,16 @@ def trainer_synapse(args, model, snapshot_path):
                 if (imax - imin) > 1e-6:
                     img = (img - imin) / (imax - imin)
 
-                if img.shape[0] == 1:
-                    writer.add_image('train/Image', img, iter_num)
-                else:
-                    writer.add_image('train/Image', img[:3, ...], iter_num)
+                # if img.shape[0] == 1:
+                #     writer.add_image('train/Image', img, iter_num)
+                # else:
+                #     writer.add_image('train/Image', img[:3, ...], iter_num)
 
                 # prediction & GT
                 preds = torch.argmax(torch.softmax(outputs, dim=1), dim=1, keepdim=True)  # [B,1,H,W]
-                writer.add_image('train/Prediction', preds[vis_idx] * 50, iter_num)
+                # writer.add_image('train/Prediction', preds[vis_idx] * 50, iter_num)
                 labs = label_batch[vis_idx].unsqueeze(0) * 50  # [1,H,W]
-                writer.add_image('train/GroundTruth', labs, iter_num)
+                # writer.add_image('train/GroundTruth', labs, iter_num)
 
 
         # -------- validate --------
