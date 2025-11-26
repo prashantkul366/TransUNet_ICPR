@@ -258,5 +258,5 @@ class UNETR(nn.Module):
             self.debug_printed = True  # don't print again
 
             # Stop after first run
-            raise SystemExit("Stopped after first forward debug.")
+            # raise SystemExit("Stopped after first forward debug.")
         return self.out(out)
