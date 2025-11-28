@@ -19,7 +19,8 @@ import torch.backends.cudnn as cudnn
 # from networks.vit_seg_modeling_hybrid_down import VisionTransformer as ViT_seg_Hybrid
 # from networks.vit_seg_modeling_hybrid_down2 import VisionTransformer as ViT_seg_Hybrid2
 # from networks.proposed_hybrid import SegMamba
-from networks.unetr import UNETR
+# from networks.unetr import UNETR
+from networks.vit_seg_modeling_proposed_hybrid import VisionTransformer as ViT_seg_Proposed_Hybrid
 #################################################################
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_synapse
@@ -218,13 +219,20 @@ if __name__ == "__main__":
     #                     feat_size=[48, 96, 192, 384]).cuda()
     ######################################################################################
     
-    net = UNETR(
-        in_channels=3,
-        out_channels=args.num_classes,
-        img_size=args.img_size,
-        spatial_dims=2,
-    ).cuda()
+    # net = UNETR(
+    #     in_channels=3,
+    #     out_channels=args.num_classes,
+    #     img_size=args.img_size,
+    #     spatial_dims=2,
+    # ).cuda()
     ######################################################################################
+
+    # Hybrid Encoder
+    ######################################################################################
+    net = ViT_seg_Proposed_Hybrid(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+    # net.load_from(weights=np.load(config_vit.pretrained_path))
+    ######################################################################################
+
     # trainer = {'Synapse': trainer_synapse,}
     trainer = {'BUSI': trainer_synapse,}
     trainer[dataset_name](args, net, snapshot_path)
