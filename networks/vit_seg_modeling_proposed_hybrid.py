@@ -257,7 +257,7 @@ class Encoder(nn.Module):
         print(f"[Encoder] input tokens: {hidden_states.shape}")
 
         attn_weights = []
-        for layer_block in self.layer:
+        for i, layer_block in enumerate(self.layer):
             print(f"[Encoder]  Block {i} input: {hidden_states.shape}")
             hidden_states, weights = layer_block(hidden_states)
             print(f"[Encoder]  Block {i} output: {hidden_states.shape}")
@@ -265,6 +265,7 @@ class Encoder(nn.Module):
             if self.vis:
                 attn_weights.append(weights)
         encoded = self.encoder_norm(hidden_states)
+        
         print(f"[Encoder] encoded (after encoder_norm): {encoded.shape}")
         return encoded, attn_weights
 
