@@ -265,7 +265,7 @@ class Encoder(nn.Module):
             if self.vis:
                 attn_weights.append(weights)
         encoded = self.encoder_norm(hidden_states)
-        
+
         print(f"[Encoder] encoded (after encoder_norm): {encoded.shape}")
         return encoded, attn_weights
 
@@ -635,11 +635,11 @@ class MambaVisionMixer(nn.Module):
         try:
             xz = self.in_proj(hidden_states)          # (B, L, d_inner)
             self._check_tensor("xz", xz)
-            print(f"[MambaVisionMixer] xz: {xz.shape}")
+            # print(f"[MambaVisionMixer] xz: {xz.shape}")
 
             xz = rearrange(xz, "b l d -> b d l")      # (B, d_inner, L)
             x, z = xz.chunk(2, dim=1)                # each (B, d_inner/2, L)
-            print(f"[MambaVisionMixer] x: {x.shape}, z: {z.shape}")
+            # print(f"[MambaVisionMixer] x: {x.shape}, z: {z.shape}")
 
             self._check_tensor("x_before_conv", x)
             self._check_tensor("z_before_conv", z)
@@ -669,7 +669,7 @@ class MambaVisionMixer(nn.Module):
             self._check_tensor("z_after_conv", z)
 
             x_dbl = self.x_proj(rearrange(x, "b d l -> (b l) d"))
-            print(f"[MambaVisionMixer] x_dbl: {x_dbl.shape}")
+            # print(f"[MambaVisionMixer] x_dbl: {x_dbl.shape}")
             self._check_tensor("x_dbl", x_dbl)
 
             dt, Bmat, Cmat = torch.split(
@@ -680,8 +680,8 @@ class MambaVisionMixer(nn.Module):
             Bmat = rearrange(Bmat, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
             Cmat = rearrange(Cmat, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
 
-            print(f"[MambaVisionMixer] dt: {dt.shape}, Bmat: {Bmat.shape}, Cmat: {Cmat.shape}")
-            print(f"[MambaVisionMixer] y after scan: {y.shape}")
+            # print(f"[MambaVisionMixer] dt: {dt.shape}, Bmat: {Bmat.shape}, Cmat: {Cmat.shape}")
+            # print(f"[MambaVisionMixer] y after scan: {y.shape}")
 
             self._check_tensor("dt", dt)
             self._check_tensor("Bmat", Bmat)
@@ -700,7 +700,7 @@ class MambaVisionMixer(nn.Module):
                 return_last_state=None,
             )
 
-            self._check_tensor("y_after_scan", y)
+            # self._check_tensor("y_after_scan", y)
 
             y = torch.cat([y, z], dim=1)
             y = rearrange(y, "b d l -> b l d")
