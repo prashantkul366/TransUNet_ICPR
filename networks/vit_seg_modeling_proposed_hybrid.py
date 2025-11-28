@@ -393,7 +393,7 @@ class DecoderCup(nn.Module):
         for i, decoder_block in enumerate(self.blocks):
             if features is not None:
                 skip = features[i] if (i < self.config.n_skip) else None
-                print(f"[DecoderCup] skip[{i}]: {skip.shape}")
+                # print(f"[DecoderCup] skip[{i}]: {skip.shape}")
             else:
                 skip = None
             x = decoder_block(x, skip=skip)
