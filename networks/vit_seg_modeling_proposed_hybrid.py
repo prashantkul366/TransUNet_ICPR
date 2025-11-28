@@ -156,27 +156,27 @@ class Embeddings(nn.Module):
 
 
     def forward(self, x):
-        print(f"[Embeddings] input: {x.shape}")
+        # print(f"[Embeddings] input: {x.shape}")
 
         if self.hybrid:
             x, features = self.hybrid_model(x)
-            print(f"[Embeddings] hybrid_model output x: {x.shape}")
-            if features is not None:
-                for i, f in enumerate(features):
-                    print(f"[Embeddings] hybrid feature[{i}]: {f.shape}")
+            # print(f"[Embeddings] hybrid_model output x: {x.shape}")
+            # if features is not None:
+                # for i, f in enumerate(features):
+                    # print(f"[Embeddings] hybrid feature[{i}]: {f.shape}")
         else:
             features = None
 
         x = self.patch_embeddings(x)  # (B, hidden. n_patches^(1/2), n_patches^(1/2))
-        print(f"[Embeddings] after patch_embeddings: {x.shape}")
+        # print(f"[Embeddings] after patch_embeddings: {x.shape}")
 
         x = x.flatten(2)
         x = x.transpose(-1, -2)  # (B, n_patches, hidden)
-        print(f"[Embeddings] after transpose (tokens): {x.shape}")
+        # print(f"[Embeddings] after transpose (tokens): {x.shape}")
 
         embeddings = x + self.position_embeddings
         embeddings = self.dropout(embeddings)
-        print(f"[Embeddings] final embeddings: {embeddings.shape}")
+        # print(f"[Embeddings] final embeddings: {embeddings.shape}")
 
         return embeddings, features
 
@@ -254,19 +254,19 @@ class Encoder(nn.Module):
             self.layer.append(copy.deepcopy(layer))
 
     def forward(self, hidden_states):
-        print(f"[Encoder] input tokens: {hidden_states.shape}")
+        # print(f"[Encoder] input tokens: {hidden_states.shape}")
 
         attn_weights = []
         for i, layer_block in enumerate(self.layer):
-            print(f"[Encoder]  Block {i} input: {hidden_states.shape}")
+            # print(f"[Encoder]  Block {i} input: {hidden_states.shape}")
             hidden_states, weights = layer_block(hidden_states)
-            print(f"[Encoder]  Block {i} output: {hidden_states.shape}")
+            # print(f"[Encoder]  Block {i} output: {hidden_states.shape}")
 
             if self.vis:
                 attn_weights.append(weights)
         encoded = self.encoder_norm(hidden_states)
 
-        print(f"[Encoder] encoded (after encoder_norm): {encoded.shape}")
+        # print(f"[Encoder] encoded (after encoder_norm): {encoded.shape}")
         return encoded, attn_weights
 
 
@@ -381,14 +381,14 @@ class DecoderCup(nn.Module):
     def forward(self, hidden_states, features=None):
         B, n_patch, hidden = hidden_states.size()  # reshape from (B, n_patch, hidden) to (B, h, w, hidden)
         h, w = int(np.sqrt(n_patch)), int(np.sqrt(n_patch))
-        print(f"[DecoderCup] tokens: {hidden_states.shape}, h=w={h}")
+        # print(f"[DecoderCup] tokens: {hidden_states.shape}, h=w={h}")
 
         x = hidden_states.permute(0, 2, 1)
         x = x.contiguous().view(B, hidden, h, w)
-        print(f"[DecoderCup] reshaped to feature map: {x.shape}")
+        # print(f"[DecoderCup] reshaped to feature map: {x.shape}")
 
         x = self.conv_more(x)
-        print(f"[DecoderCup] after conv_more: {x.shape}")
+        # print(f"[DecoderCup] after conv_more: {x.shape}")
 
         for i, decoder_block in enumerate(self.blocks):
             if features is not None:
@@ -397,7 +397,7 @@ class DecoderCup(nn.Module):
             else:
                 skip = None
             x = decoder_block(x, skip=skip)
-            print(f"[DecoderCup] after decoder_block[{i}]: {x.shape}")
+            # print(f"[DecoderCup] after decoder_block[{i}]: {x.shape}")
         return x
 
 class FKANMLP(nn.Module):
@@ -484,16 +484,16 @@ class TokenMDTA(nn.Module):
         H = W = int(math.sqrt(N))
         assert H * W == N, "Token count N must be a perfect square"
 
-        print(f"[TokenMDTA] input: {x.shape}, H=W={H}")
+        # print(f"[TokenMDTA] input: {x.shape}, H=W={H}")
 
         x_2d = x.permute(0, 2, 1).reshape(B, D, H, W)   # (B, D, H, W)
-        print(f"[TokenMDTA] reshaped to 2D: {x_2d.shape}")
+        # print(f"[TokenMDTA] reshaped to 2D: {x_2d.shape}")
 
         out_2d = self.inner(x_2d)                       # (B, D, H, W)
-        print(f"[TokenMDTA] after inner attention: {out_2d.shape}")
+        # print(f"[TokenMDTA] after inner attention: {out_2d.shape}")
 
         out = out_2d.reshape(B, D, N).permute(0, 2, 1)  # (B, N, D)
-        print(f"[TokenMDTA] back to tokens: {out.shape}")
+        # print(f"[TokenMDTA] back to tokens: {out.shape}")
 
         # no explicit attention weights here
         weights = None
@@ -591,7 +591,7 @@ class MambaVisionMixer(nn.Module):
         hidden_states: (B, L, D)
         Returns: same shape as hidden_states
         """
-        print(f"[MambaVisionMixer] input: {hidden_states.shape}")
+        # print(f"[MambaVisionMixer] input: {hidden_states.shape}")
 
         if hidden_states.dim() != 3:
             raise RuntimeError(
@@ -706,7 +706,7 @@ class MambaVisionMixer(nn.Module):
             y = rearrange(y, "b d l -> b l d")
             out = self.out_proj(y)
             self._check_tensor("out", out)
-            print(f"[MambaVisionMixer] out: {out.shape}")
+            # print(f"[MambaVisionMixer] out: {out.shape}")
             return out
 
         except RuntimeError as e:
@@ -779,52 +779,52 @@ class TransformerMambaBlock(nn.Module):
 
     def forward(self, x):
         # x: (B, N, C)
-        print(f"[TransformerMambaBlock] input: {x.shape}")
+        # print(f"[TransformerMambaBlock] input: {x.shape}")
         x_in = x
 
         # ================= TRANSFORMER PART =================
         # 1) LN -> MDTA -> add residual (orig input)
         t = self.ln1(x_in)
-        print(f"[TransformerMambaBlock] after ln1: {t.shape}")
+        # print(f"[TransformerMambaBlock] after ln1: {t.shape}")
 
         t, _ = self.attn(t)               # (B, N, C)
-        print(f"[TransformerMambaBlock] after attn: {t.shape}")
+        # print(f"[TransformerMambaBlock] after attn: {t.shape}")
     
         t = x_in + t                      # attn_residual
-        print(f"[TransformerMambaBlock] after attn residual: {t.shape}")
+        # print(f"[TransformerMambaBlock] after attn residual: {t.shape}")
 
         # 2) LN -> f-KAN -> add residual (orig input)
         u = self.ln2(t)
-        print(f"[TransformerMambaBlock] after ln2: {u.shape}")
+        # print(f"[TransformerMambaBlock] after ln2: {u.shape}")
 
         u = self.ffn1(u)                  # (B, N, C)
-        print(f"[TransformerMambaBlock] after fKAN1: {u.shape}")
+        # print(f"[TransformerMambaBlock] after fKAN1: {u.shape}")
 
         x_tr = x_in + u                   # transformer output
-        print(f"[TransformerMambaBlock] transformer output x_tr: {x_tr.shape}")
+        # print(f"[TransformerMambaBlock] transformer output x_tr: {x_tr.shape}")
 
         # ================== MAMBA PART =====================
         # 3) LN -> VSSM -> add residual (transformer output)
         m = self.ln3(x_tr)
-        print(f"[TransformerMambaBlock] after ln3: {m.shape}")
+        # print(f"[TransformerMambaBlock] after ln3: {m.shape}")
 
         m = self.vssm(m)                  # (B, N, C)
-        print(f"[TransformerMambaBlock] after vssm: {m.shape}")
+        # print(f"[TransformerMambaBlock] after vssm: {m.shape}")
 
         m = x_tr + m                      # mamba_residual
-        print(f"[TransformerMambaBlock] after vssm residual: {m.shape}")
+        # print(f"[TransformerMambaBlock] after vssm residual: {m.shape}")
 
 
         # 4) LN -> f-KAN -> add residual (transformer output)
         n = self.ln4(m)
-        print(f"[TransformerMambaBlock] after ln4: {n.shape}")
+        # print(f"[TransformerMambaBlock] after ln4: {n.shape}")
 
         n = self.ffn2(n)                  # (B, N, C)
-        print(f"[TransformerMambaBlock] after fKAN2: {n.shape}")
+        # print(f"[Transforme/rMambaBlock] after fKAN2: {n.shape}")
 
         x_out = x_tr + n                  # final output tokens
 
-        print(f"[TransformerMambaBlock] output: {x_out.shape}")
+        # print(f"[TransformerMambaBlock] output: {x_out.shape}")
         return x_out
 
 class VisionTransformer(nn.Module):
@@ -845,23 +845,23 @@ class VisionTransformer(nn.Module):
         print("TransUnet with Hybrid Block instead of Transformer Initiated")
 
     def forward(self, x):
-        print(f"[VisionTransformer] input x: {x.shape}")
+        # print(f"[VisionTransformer] input x: {x.shape}")
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)                           # make it 3 channel if greyscale 
-            print(f"[VisionTransformer] after repeat to 3-ch: {x.shape}")
+            # print(f"[VisionTransformer] after repeat to 3-ch: {x.shape}")
 
         x, attn_weights, features = self.transformer(x)  # (B, n+_patch, hidden)    encoder 
-        print(f"[VisionTransformer] tokens from encoder: {x.shape}")
+        # print(f"[VisionTransformer] tokens from encoder: {x.shape}")
 
-        if features is not None:
-            for i, f in enumerate(features):
-                print(f"[VisionTransformer] encoder skip feature[{i}]: {f.shape}")
+        # if features is not None:
+            # for i, f in enumerate(features):
+            #     print(f"[VisionTransformer] encoder skip feature[{i}]: {f.shape}")
 
         x = self.decoder(x, features)
-        print(f"[VisionTransformer] after decoder: {x.shape}")
+        # print(f"[VisionTransformer] after decoder: {x.shape}")
 
         logits = self.segmentation_head(x)
-        print(f"[VisionTransformer] logits: {logits.shape}")
+        # print(f"[VisionTransformer] logits: {logits.shape}")
 
         return logits
 
