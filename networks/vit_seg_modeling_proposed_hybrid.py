@@ -51,51 +51,51 @@ def swish(x):
 ACT2FN = {"gelu": torch.nn.functional.gelu, "relu": torch.nn.functional.relu, "swish": swish}
 
 
-class Attention(nn.Module):
-    def __init__(self, config, vis):
-        super(Attention, self).__init__()
-        self.vis = vis
-        self.num_attention_heads = config.transformer["num_heads"]
-        self.attention_head_size = int(config.hidden_size / self.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+# class Attention(nn.Module):
+#     def __init__(self, config, vis):
+#         super(Attention, self).__init__()
+#         self.vis = vis
+#         self.num_attention_heads = config.transformer["num_heads"]
+#         self.attention_head_size = int(config.hidden_size / self.num_attention_heads)
+#         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = Linear(config.hidden_size, self.all_head_size)
-        self.key = Linear(config.hidden_size, self.all_head_size)
-        self.value = Linear(config.hidden_size, self.all_head_size)
+#         self.query = Linear(config.hidden_size, self.all_head_size)
+#         self.key = Linear(config.hidden_size, self.all_head_size)
+#         self.value = Linear(config.hidden_size, self.all_head_size)
 
-        self.out = Linear(config.hidden_size, config.hidden_size)
-        self.attn_dropout = Dropout(config.transformer["attention_dropout_rate"])
-        self.proj_dropout = Dropout(config.transformer["attention_dropout_rate"])
+#         self.out = Linear(config.hidden_size, config.hidden_size)
+#         self.attn_dropout = Dropout(config.transformer["attention_dropout_rate"])
+#         self.proj_dropout = Dropout(config.transformer["attention_dropout_rate"])
 
-        self.softmax = Softmax(dim=-1)
+#         self.softmax = Softmax(dim=-1)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+#     def transpose_for_scores(self, x):
+#         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+#         x = x.view(*new_x_shape)
+#         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states):
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
+#     def forward(self, hidden_states):
+#         mixed_query_layer = self.query(hidden_states)
+#         mixed_key_layer = self.key(hidden_states)
+#         mixed_value_layer = self.value(hidden_states)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+#         query_layer = self.transpose_for_scores(mixed_query_layer)
+#         key_layer = self.transpose_for_scores(mixed_key_layer)
+#         value_layer = self.transpose_for_scores(mixed_value_layer)
 
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        attention_probs = self.softmax(attention_scores)
-        weights = attention_probs if self.vis else None
-        attention_probs = self.attn_dropout(attention_probs)
+#         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+#         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+#         attention_probs = self.softmax(attention_scores)
+#         weights = attention_probs if self.vis else None
+#         attention_probs = self.attn_dropout(attention_probs)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-        attention_output = self.out(context_layer)
-        attention_output = self.proj_dropout(attention_output)
-        return attention_output, weights
+#         context_layer = torch.matmul(attention_probs, value_layer)
+#         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+#         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+#         context_layer = context_layer.view(*new_context_layer_shape)
+#         attention_output = self.out(context_layer)
+#         attention_output = self.proj_dropout(attention_output)
+#         return attention_output, weights
 
 
 class Mlp(nn.Module):
@@ -156,16 +156,28 @@ class Embeddings(nn.Module):
 
 
     def forward(self, x):
+        print(f"[Embeddings] input: {x.shape}")
+
         if self.hybrid:
             x, features = self.hybrid_model(x)
+            print(f"[Embeddings] hybrid_model output x: {x.shape}")
+            if features is not None:
+                for i, f in enumerate(features):
+                    print(f"[Embeddings] hybrid feature[{i}]: {f.shape}")
         else:
             features = None
+
         x = self.patch_embeddings(x)  # (B, hidden. n_patches^(1/2), n_patches^(1/2))
+        print(f"[Embeddings] after patch_embeddings: {x.shape}")
+
         x = x.flatten(2)
         x = x.transpose(-1, -2)  # (B, n_patches, hidden)
+        print(f"[Embeddings] after transpose (tokens): {x.shape}")
 
         embeddings = x + self.position_embeddings
         embeddings = self.dropout(embeddings)
+        print(f"[Embeddings] final embeddings: {embeddings.shape}")
+
         return embeddings, features
 
 
@@ -242,12 +254,18 @@ class Encoder(nn.Module):
             self.layer.append(copy.deepcopy(layer))
 
     def forward(self, hidden_states):
+        print(f"[Encoder] input tokens: {hidden_states.shape}")
+
         attn_weights = []
         for layer_block in self.layer:
+            print(f"[Encoder]  Block {i} input: {hidden_states.shape}")
             hidden_states, weights = layer_block(hidden_states)
+            print(f"[Encoder]  Block {i} output: {hidden_states.shape}")
+
             if self.vis:
                 attn_weights.append(weights)
         encoded = self.encoder_norm(hidden_states)
+        print(f"[Encoder] encoded (after encoder_norm): {encoded.shape}")
         return encoded, attn_weights
 
 
@@ -362,15 +380,23 @@ class DecoderCup(nn.Module):
     def forward(self, hidden_states, features=None):
         B, n_patch, hidden = hidden_states.size()  # reshape from (B, n_patch, hidden) to (B, h, w, hidden)
         h, w = int(np.sqrt(n_patch)), int(np.sqrt(n_patch))
+        print(f"[DecoderCup] tokens: {hidden_states.shape}, h=w={h}")
+
         x = hidden_states.permute(0, 2, 1)
         x = x.contiguous().view(B, hidden, h, w)
+        print(f"[DecoderCup] reshaped to feature map: {x.shape}")
+
         x = self.conv_more(x)
+        print(f"[DecoderCup] after conv_more: {x.shape}")
+
         for i, decoder_block in enumerate(self.blocks):
             if features is not None:
                 skip = features[i] if (i < self.config.n_skip) else None
+                print(f"[DecoderCup] skip[{i}]: {skip.shape}")
             else:
                 skip = None
             x = decoder_block(x, skip=skip)
+            print(f"[DecoderCup] after decoder_block[{i}]: {x.shape}")
         return x
 
 class FKANMLP(nn.Module):
@@ -457,9 +483,16 @@ class TokenMDTA(nn.Module):
         H = W = int(math.sqrt(N))
         assert H * W == N, "Token count N must be a perfect square"
 
+        print(f"[TokenMDTA] input: {x.shape}, H=W={H}")
+
         x_2d = x.permute(0, 2, 1).reshape(B, D, H, W)   # (B, D, H, W)
+        print(f"[TokenMDTA] reshaped to 2D: {x_2d.shape}")
+
         out_2d = self.inner(x_2d)                       # (B, D, H, W)
+        print(f"[TokenMDTA] after inner attention: {out_2d.shape}")
+
         out = out_2d.reshape(B, D, N).permute(0, 2, 1)  # (B, N, D)
+        print(f"[TokenMDTA] back to tokens: {out.shape}")
 
         # no explicit attention weights here
         weights = None
@@ -557,6 +590,8 @@ class MambaVisionMixer(nn.Module):
         hidden_states: (B, L, D)
         Returns: same shape as hidden_states
         """
+        print(f"[MambaVisionMixer] input: {hidden_states.shape}")
+
         if hidden_states.dim() != 3:
             raise RuntimeError(
                 f"[MambaVisionMixer] Expected (B, L, D), got {hidden_states.shape}"
@@ -599,9 +634,12 @@ class MambaVisionMixer(nn.Module):
         try:
             xz = self.in_proj(hidden_states)          # (B, L, d_inner)
             self._check_tensor("xz", xz)
+            print(f"[MambaVisionMixer] xz: {xz.shape}")
 
             xz = rearrange(xz, "b l d -> b d l")      # (B, d_inner, L)
             x, z = xz.chunk(2, dim=1)                # each (B, d_inner/2, L)
+            print(f"[MambaVisionMixer] x: {x.shape}, z: {z.shape}")
+
             self._check_tensor("x_before_conv", x)
             self._check_tensor("z_before_conv", z)
 
@@ -630,6 +668,7 @@ class MambaVisionMixer(nn.Module):
             self._check_tensor("z_after_conv", z)
 
             x_dbl = self.x_proj(rearrange(x, "b d l -> (b l) d"))
+            print(f"[MambaVisionMixer] x_dbl: {x_dbl.shape}")
             self._check_tensor("x_dbl", x_dbl)
 
             dt, Bmat, Cmat = torch.split(
@@ -639,6 +678,9 @@ class MambaVisionMixer(nn.Module):
             dt = rearrange(self.dt_proj(dt), "(b l) d -> b d l", l=seqlen)
             Bmat = rearrange(Bmat, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
             Cmat = rearrange(Cmat, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
+
+            print(f"[MambaVisionMixer] dt: {dt.shape}, Bmat: {Bmat.shape}, Cmat: {Cmat.shape}")
+            print(f"[MambaVisionMixer] y after scan: {y.shape}")
 
             self._check_tensor("dt", dt)
             self._check_tensor("Bmat", Bmat)
@@ -663,6 +705,7 @@ class MambaVisionMixer(nn.Module):
             y = rearrange(y, "b d l -> b l d")
             out = self.out_proj(y)
             self._check_tensor("out", out)
+            print(f"[MambaVisionMixer] out: {out.shape}")
             return out
 
         except RuntimeError as e:
@@ -735,35 +778,58 @@ class TransformerMambaBlock(nn.Module):
 
     def forward(self, x):
         # x: (B, N, C)
+        print(f"[TransformerMambaBlock] input: {x.shape}")
         x_in = x
 
         # ================= TRANSFORMER PART =================
         # 1) LN -> MDTA -> add residual (orig input)
         t = self.ln1(x_in)
+        print(f"[TransformerMambaBlock] after ln1: {t.shape}")
+
         t, _ = self.attn(t)               # (B, N, C)
+        print(f"[TransformerMambaBlock] after attn: {t.shape}")
+    
         t = x_in + t                      # attn_residual
+        print(f"[TransformerMambaBlock] after attn residual: {t.shape}")
 
         # 2) LN -> f-KAN -> add residual (orig input)
         u = self.ln2(t)
+        print(f"[TransformerMambaBlock] after ln2: {u.shape}")
+
         u = self.ffn1(u)                  # (B, N, C)
+        print(f"[TransformerMambaBlock] after fKAN1: {u.shape}")
+
         x_tr = x_in + u                   # transformer output
+        print(f"[TransformerMambaBlock] transformer output x_tr: {x_tr.shape}")
 
         # ================== MAMBA PART =====================
         # 3) LN -> VSSM -> add residual (transformer output)
         m = self.ln3(x_tr)
+        print(f"[TransformerMambaBlock] after ln3: {m.shape}")
+
         m = self.vssm(m)                  # (B, N, C)
+        print(f"[TransformerMambaBlock] after vssm: {m.shape}")
+
         m = x_tr + m                      # mamba_residual
+        print(f"[TransformerMambaBlock] after vssm residual: {m.shape}")
+
 
         # 4) LN -> f-KAN -> add residual (transformer output)
         n = self.ln4(m)
+        print(f"[TransformerMambaBlock] after ln4: {n.shape}")
+
         n = self.ffn2(n)                  # (B, N, C)
+        print(f"[TransformerMambaBlock] after fKAN2: {n.shape}")
+
         x_out = x_tr + n                  # final output tokens
 
+        print(f"[TransformerMambaBlock] output: {x_out.shape}")
         return x_out
 
 class VisionTransformer(nn.Module):
     def __init__(self, config, img_size=224, num_classes=21843, zero_head=False, vis=False):
         super(VisionTransformer, self).__init__()
+        
         self.num_classes = num_classes
         self.zero_head = zero_head
         self.classifier = config.classifier
@@ -778,11 +844,24 @@ class VisionTransformer(nn.Module):
         print("TransUnet with Hybrid Block instead of Transformer Initiated")
 
     def forward(self, x):
+        print(f"[VisionTransformer] input x: {x.shape}")
         if x.size()[1] == 1:
             x = x.repeat(1,3,1,1)                           # make it 3 channel if greyscale 
+            print(f"[VisionTransformer] after repeat to 3-ch: {x.shape}")
+
         x, attn_weights, features = self.transformer(x)  # (B, n+_patch, hidden)    encoder 
+        print(f"[VisionTransformer] tokens from encoder: {x.shape}")
+
+        if features is not None:
+            for i, f in enumerate(features):
+                print(f"[VisionTransformer] encoder skip feature[{i}]: {f.shape}")
+
         x = self.decoder(x, features)
+        print(f"[VisionTransformer] after decoder: {x.shape}")
+
         logits = self.segmentation_head(x)
+        print(f"[VisionTransformer] logits: {logits.shape}")
+
         return logits
 
     def load_from(self, weights):
